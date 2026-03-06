@@ -1,0 +1,153 @@
+# ============================================================
+# AutoDev Pipeline — 通用自动化开发流水线配置
+# v3.0 — 项目无关, 通过 project / machines / doc_set 动态配置
+# ============================================================
+
+orchestrator:
+  mode: sprint            # sprint | continuous
+  current_sprint: 1
+  poll_interval: 10       # 秒 — 主循环轮询间隔
+  max_concurrent: 4       # 最多并行任务数
+  port: 9500              # Dashboard API 端口
+
+# ── 项目配置 (v3.0 新增) ────────────────────────────────
+
+project:
+  name: my-project
+  path: ~/my-project          # 各机器上的项目路径 (可被 machine.work_dir 覆盖)
+  repo_url: ""                # Git 远程仓库 URL
+  branch: main
+
+# ── 文档集 (v3.0 新增) ─────────────────────────────────
+
+doc_set:
+  requirements: "docs/*需求*.md"
+  design: "docs/*设计*.md"
+  task_card: "docs/*Sprint*任务卡*.md"
+  test_plan: "docs/*测试*.md"
+  dev_plan: "docs/*开发计划*.md"
+  risk: "docs/*风险*.md"
+  pipeline: "docs/*流水线*.md"
+  # 也可以指定具体路径:
+  # task_card: "docs/07-Sprint任务卡.md"
+
+# ── aider / LLM 网关 ─────────────────────────────────────
+
+llm:
+  openai_api_base: ${OPENAI_API_BASE}
+  openai_api_key: ${OPENAI_API_KEY}
+  model: ${AIDER_MODEL}
+  timeout: 600            # 单任务 aider 最长秒数
+  max_tokens: 8192
+
+# ── 机器池 (v3.0: 列表格式, 用 tags 替代 owned_dirs) ────
+
+machines:
+  - machine_id: gpu_4090
+    display_name: "4090 GPU Server"
+    host: 172.16.11.194
+    port: 22
+    user: user
+    work_dir: ~/my-project
+    tags: [gpu, cuda, ml, python]
+    aider_prefix: 'export PATH="$HOME/.local/bin:$PATH"'
+    aider_model: ""           # 留空则使用全局 llm.model
+
+  - machine_id: mac_mini
+    display_name: "Mac Mini 8T"
+    host: 172.16.12.50
+    port: 22
+    user: edge_sale
+    work_dir: ~/my-project
+    tags: [macos, frontend, web, python]
+    aider_prefix: 'export PATH="$HOME/Library/Python/3.9/bin:$PATH"'
+
+  - machine_id: gateway
+    display_name: "Gateway Server"
+    host: 172.16.14.215
+    port: 22
+    user: realman
+    work_dir: ~/my-project
+    tags: [linux, deploy, nginx, docker]
+    aider_prefix: 'source ~/.venv/aider/bin/activate'
+
+  - machine_id: data_center
+    display_name: "Data Center"
+    host: 172.16.14.90
+    port: 22
+    user: realman
+    work_dir: ~/my-project
+    tags: [linux, data, scripts, monitoring]
+    aider_prefix: 'export PATH="$HOME/miniconda3/bin:$PATH" && source $HOME/miniconda3/etc/profile.d/conda.sh && conda activate aider'
+
+  - machine_id: orchestrator
+    display_name: "Orchestrator"
+    host: 172.16.14.201
+    port: 22
+    user: user
+    work_dir: ~/my-project
+    tags: [linux, orchestrator, python, testing]
+    aider_prefix: 'export PATH="$HOME/.local/bin:$PATH"'
+
+# ── 任务控制 ──────────────────────────────────────────────
+
+task:
+  max_retries: 3          # 每个任务 (review_retry + test_retry) 最大重试
+  single_task_timeout: 600
+  concurrent_limit: 4
+
+# ── Git ───────────────────────────────────────────────────
+
+git:
+  branch: main
+  bare_repo: ""               # 可选: 裸仓库地址 (用于 aider push)
+  auto_tag_on_sprint_end: true
+
+# ── 测试 ─────────────────────────────────────────────────
+
+testing:
+  run_on: orchestrator           # 测试在 orchestrator 本地执行
+  pytest_args: "-v --tb=short --continue-on-collection-errors"
+  pass_threshold: 4.0            # 云端多模型加权评分通过线
+  test_pass_rate_threshold: 0.8  # 全量回退测试通过率阈值 (80%)
+  report_dir: reports/
+
+# ── 通知 ─────────────────────────────────────────────────
+
+notification:
+  # 方式 1: 钉钉自定义 Webhook 机器人
+  dingtalk_webhook: ${DINGTALK_WEBHOOK_URL}
+  dingtalk_webhook_secret: ${DINGTALK_WEBHOOK_SECRET}
+
+  # 方式 2: 钉钉企业内部应用 OpenAPI
+  dingtalk_app_key: ${DINGTALK_APP_KEY}
+  dingtalk_app_secret: ${DINGTALK_APP_SECRET}
+  dingtalk_robot_code: ""
+  dingtalk_conversation_id: ""
+
+  # @提醒
+  at_mobiles: []
+  at_all: false
+
+  # 触发事件
+  notify_on:
+    - sprint_start
+    - sprint_end
+    - task_escalated
+    - daily_summary
+  daily_summary_time: "18:00"
+
+# ── 验收测试 ──────────────────────────────────────────
+
+acceptance:
+  enabled: true
+  run_on_sprint_end: true
+  env_var: RUN_ACCEPTANCE
+
+# ── 文件路径 (v3.0: 使用 doc_set 为主, paths 为兼容) ───
+
+paths:
+  task_card: "docs/07-Sprint任务卡.md"   # 回退默认
+  design_doc: "docs/04-系统概要设计.md"
+  contracts_dir: contracts/
+  log_dir: logs/

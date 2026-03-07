@@ -14,27 +14,27 @@
 |---------|---------|-----|------|-----|----|----|----|
 | FR-001 | 文档集加载 | SYS-001 | ARCH-001 | MOD-001 | IF-001 | — | TC-050,051 |
 | FR-002 | LLM 任务拆解 | SYS-001 | ARCH-001 | MOD-001 | IF-002 | — | TC-052,053 |
-| FR-003 | 机器注册/注销 | SYS-002 | ARCH-002 | MOD-003 | IF-005 | DM-008 | TC-020,021 |
-| FR-004 | 标签匹配调度 | SYS-002 | ARCH-002 | MOD-003 | IF-005 | DM-008 | TC-021,022,023 |
-| FR-005 | 任务入队+拓扑 | SYS-003 | ARCH-003 | MOD-007 | IF-003 | DM-004 | TC-030,032 |
-| FR-006 | 并发批次分发 | SYS-003 | ARCH-003 | MOD-007 | IF-004 | DM-004 | TC-031 |
-| FR-007 | aider 远程执行 | SYS-004 | ARCH-004 | MOD-008 | IF-006 | DM-005 | TC-060,061,062 |
-| FR-008 | 批量并行分发 | SYS-004 | ARCH-004 | MOD-008 | IF-007 | DM-005 | TC-063 |
-| FR-009 | L1 静态审查 | SYS-005 | ARCH-005 | MOD-009 | IF-008 | DM-006 | TC-070,071 |
-| FR-010 | L2 契约审查 | SYS-005 | ARCH-005 | MOD-009 | IF-008 | DM-006 | TC-072 |
-| FR-011 | L3 设计审查 | SYS-005 | ARCH-005 | MOD-009 | IF-008 | DM-006 | TC-073 |
-| FR-012 | 状态机转换 | SYS-006 | ARCH-006 | MOD-006 | IF-010 | DM-001 | TC-010,011,014,015 |
-| FR-013 | 重试/升级策略 | SYS-006 | ARCH-006 | MOD-006 | IF-010 | DM-001 | TC-012,013 |
-| FR-014 | 自动测试执行 | SYS-007 | ARCH-007 | MOD-010 | IF-009 | DM-007 | TC-080,081 |
-| FR-015 | fallback 容忍 | SYS-007 | ARCH-007 | MOD-010 | IF-009 | DM-007 | TC-082,083 |
-| FR-016 | 钉钉通知 | SYS-008 | ARCH-008 | MOD-011 | IF-011 | — | TC-090,091 |
-| FR-017 | Sprint 报告 | SYS-008 | ARCH-008 | MOD-011 | IF-011 | — | TC-092 |
-| FR-018 | 自动 commit/push | SYS-009 | ARCH-009 | MOD-012 | IF-012 | — | TC-100 |
-| FR-019 | Sprint 打标签 | SYS-009 | ARCH-009 | MOD-012 | IF-012 | — | TC-101 |
-| FR-020 | 多节点同步 | SYS-009 | ARCH-009 | MOD-012 | IF-012 | — | TC-102 |
-| FR-021 | 反馈驱动迭代 | SYS-006 | ARCH-010 | MOD-006,007 | IF-003,010 | DM-004 | TC-111 |
-| FR-022 | 人工升级通知 | SYS-008 | ARCH-008 | MOD-011 | IF-011 | — | TC-112 |
-| FR-023 | CLI 入口 | SYS-001 | ARCH-001 | MOD-013 | — | — | TC-001 |
+| FR-003 | 结构化任务输出 | SYS-001 | ARCH-001 | MOD-001 | IF-002 | DM-004 | TC-003, TC-054, TC-055 |
+| FR-004 | 机器注册/注销 | SYS-002 | ARCH-002 | MOD-003 | IF-005 | DM-008 | TC-020,021 |
+| FR-005 | 标签匹配调度 | SYS-002 | ARCH-002 | MOD-003 | IF-005 | DM-008 | TC-021,022,023 |
+| FR-006 | 任务入队+拓扑 | SYS-003 | ARCH-003 | MOD-004 | IF-003 | DM-004 | TC-030,032 |
+| FR-007 | 依赖拓扑排序 | SYS-003 | ARCH-003 | MOD-004 | IF-004 | DM-004 | TC-030,031 |
+| FR-008 | aider 远程执行 | SYS-003 | ARCH-003 | MOD-006 | IF-006,007 | DM-005 | TC-060,061,062,063 |
+| FR-009 | L1 静态审查 | SYS-004 | ARCH-004 | MOD-007 | IF-008 | DM-006 | TC-070,071 |
+| FR-010 | L2 契约审查 | SYS-004 | ARCH-004 | MOD-007 | IF-008 | DM-006 | TC-072 |
+| FR-011 | L3 设计审查 | SYS-004 | ARCH-004 | MOD-007 | IF-008 | DM-006 | TC-073 |
+| FR-012 | 自动测试执行 | SYS-005 | ARCH-005 | MOD-008 | IF-009 | DM-007 | TC-080,081 |
+| FR-013 | fallback 容忍 | SYS-005 | ARCH-005 | MOD-008 | IF-009 | DM-007 | TC-082,083 |
+| FR-014 | 状态机转换 | SYS-006 | ARCH-006 | MOD-009 | IF-010 | DM-001 | TC-010,011,014,015 |
+| FR-015 | 重试/升级策略 | SYS-006 | ARCH-006 | MOD-009 | IF-010 | DM-001 | TC-012,013 |
+| FR-016 | 钉钉通知 | SYS-007 | ARCH-007 | MOD-010 | IF-011 | — | TC-090,091 |
+| FR-017 | Sprint 报告 | SYS-007 | ARCH-007 | MOD-010 | IF-011 | — | TC-092 |
+| FR-018 | 每日摘要 | SYS-007 | ARCH-007 | MOD-010 | IF-011 | — | TC-092, TC-093, TC-094 |
+| FR-019 | 自动 commit/push | SYS-008 | ARCH-008 | MOD-011 | IF-012 | — | TC-100 |
+| FR-020 | Sprint 打标签 | SYS-008 | ARCH-008 | MOD-011 | IF-012 | — | TC-101 |
+| FR-021 | 多节点同步 | SYS-008 | ARCH-008 | MOD-011 | IF-012 | — | TC-102 |
+| FR-022 | 反馈驱动迭代 | SYS-009 | ARCH-007 | MOD-010,MOD-009 | IF-010,011 | DM-004 | TC-111 |
+| FR-023 | 人工升级通知 | SYS-009 | ARCH-007 | MOD-010 | IF-011 | — | TC-034, TC-035, TC-112 |
 
 ---
 
@@ -42,19 +42,19 @@
 
 | MOD 编号 | 模块名 | 覆盖 FR | IF | TC 总数 |
 |---------|--------|--------|-----|--------|
-| MOD-001 | doc_analyzer | FR-001,002 | IF-001,002 | 4 |
+| MOD-001 | doc_analyzer | FR-001,002,003 | IF-001,002 | 4 |
 | MOD-002 | doc_parser | FR-001 | — | 1 (TC-050 间接) |
-| MOD-003 | machine_registry | FR-003,004 | IF-005 | 5 |
-| MOD-004 | config | CON-001 | — | 4 |
-| MOD-005 | task_models | FR-005,012 | — | 3 |
-| MOD-006 | state_machine | FR-012,013,021 | IF-010 | 6 |
-| MOD-007 | task_engine | FR-005,006,021 | IF-003,004 | 4 |
-| MOD-008 | dispatcher | FR-007,008 | IF-006,007 | 4 |
-| MOD-009 | reviewer | FR-009,010,011 | IF-008 | 4 |
-| MOD-010 | test_runner | FR-014,015 | IF-009 | 4 |
-| MOD-011 | reporter | FR-016,017,022 | IF-011 | 3 |
-| MOD-012 | git_ops | FR-018,019,020 | IF-012 | 3 |
-| MOD-013 | main | FR-023 | — | 1 |
+| MOD-003 | machine_registry | FR-004,005 | IF-005 | 5 |
+| MOD-004 | task_engine | FR-006,007 | IF-003,004 | 4 |
+| MOD-005 | task_models | FR-003,014 | — | 3 |
+| MOD-006 | dispatcher | FR-008 | IF-006,007 | 4 |
+| MOD-007 | reviewer | FR-009,010,011 | IF-008 | 4 |
+| MOD-008 | test_runner | FR-012,013 | IF-009 | 4 |
+| MOD-009 | state_machine | FR-014,015 | IF-010 | 6 |
+| MOD-010 | reporter | FR-016,017,018,022,023 | IF-011 | 4 |
+| MOD-011 | git_ops | FR-019,020,021 | IF-012 | 3 |
+| MOD-012 | config | CON-001 | — | 4 |
+| MOD-013 | main | — (入口编排) | — | 1 |
 
 ---
 
@@ -133,3 +133,4 @@
 | 版本 | 日期 | 变更内容 | 作者 |
 |------|------|---------|------|
 | v1.0 | 2026-03-06 | 初始版本：23 FR 全链路追溯 + NFR/CON 追溯 + 覆盖率统计 | AutoDev Pipeline |
+| v1.1 | 2026-03-06 | 修正: §1 正向追溯 8/13 MOD 编号与 OD-001 对齐, §2 反向追溯重建 (A-001) | AutoDev Pipeline |

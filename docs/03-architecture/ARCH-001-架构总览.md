@@ -286,8 +286,59 @@
 
 ---
 
+## §5 健康检查与心跳机制
+
+> 映射: A-010 (技术总监 + 生产负责人评审要求), NFR-004~006
+
+### 5.1 健康检查架构
+
+```
+Orchestrator (主控)
+│
+├── [定时器] 每 60s 执行一次 health_check_all()
+│   │
+│   ├── → SSH ping 每台 worker 机器 (timeout 5s)
+│   │   ├── 成功 → status = ONLINE, 更新 last_heartbeat
+│   │   └── 失败 → retry 2 次 → 仍失败 → status = ERROR
+│   │
+│   ├── → 检查 LLM API 可达性 (HEAD /v1/models, timeout 10s)
+│   │   └── 失败 → 钉钉告警 "LLM API 不可达"
+│   │
+│   └── → 检查磁盘空间 (.autodev/state.db 所在分区)
+│       └── < 500MB → 钉钉告警 "磁盘空间不足"
+│
+├── [事件驱动] dispatch_task 超时
+│   └── → 标记机器 ERROR + 任务回收到 RETRY
+│
+└── [watchdog] systemd 看门狗
+    └── → 进程异常退出 → 自动重启 → load_tasks() 恢复
+```
+
+### 5.2 心跳协议
+
+| 属性 | 值 |
+|------|---|
+| **检测方式** | Orchestrator → Worker SSH 执行 `echo ok` (主动探测) |
+| **探测间隔** | 60 秒 (可配置 `health_check_interval`) |
+| **超时阈值** | 5 秒 / 次 |
+| **重试次数** | 2 次 (间隔 5s) |
+| **失败动作** | 标记 `machine.status = ERROR`, 该机器上的 DISPATCHED 任务迁移至其他 idle 机器 |
+| **恢复检测** | 下次心跳成功 → 自动恢复 `machine.status = ONLINE` |
+
+### 5.3 影响模块
+
+| 模块 | 变更 |
+|------|------|
+| **MachineRegistry (MOD-003)** | 新增 `last_heartbeat: float` 字段, `health_check(machine) → bool` 方法 |
+| **Orchestrator (MOD-013)** | 主循环增加定时 `health_check_all()` 调度 |
+| **Config (MOD-012)** | 新增 `health_check_interval`, `health_check_timeout` 配置项 |
+| **Reporter (MOD-010)** | 新增 `notify_machine_error(machine_id)` 告警 |
+
+---
+
 ## 变更记录
 
 | 版本 | 日期 | 变更内容 | 作者 |
 |------|------|---------|------|
 | v1.0 | 2026-03-06 | 初始框架 + §1 架构风格与原则 | AutoDev Pipeline |
+| v1.1 | 2026-03-06 | 新增: §5 健康检查与心跳机制 (A-010), 技术依赖增加 sqlite3 (ADR-007) | AutoDev Pipeline |

@@ -5,8 +5,8 @@
 > **状态**: 草稿  
 > **更新日期**: 2026-03-06  
 > **上游文档**: [REQ-001](../01-requirements/REQ-001-系统需求规格说明书.md) · [OD-001](../04-outline-design/OD-001-模块概要设计.md) · [OD-003](../04-outline-design/OD-003-接口契约设计.md)  
-> **下游文档**: [TRACE-001](../05-traceability/TRACE-001-追溯矩阵.md)  
-> **参考**: [05-测试方案与计划 (v0.5)](../10-references/migrated/05-测试方案与计划.md)
+> **下游文档**: [TRACE-001](../06-traceability/TRACE-001-追溯矩阵.md)  
+> **参考**: [05-测试方案与计划 (v0.5)](../11-references/migrated/05-测试方案与计划.md)
 
 ---
 
@@ -79,44 +79,46 @@
 
 ### 2.2 L2 组件测试 — 核心模块
 
-#### 2.2.1 状态机 (MOD-006)
+#### 2.2.1 状态机 (MOD-009)
 
 | TC 编号 | 测试目标 | 映射 FR | 输入 | 预期输出 |
 |---------|---------|--------|------|---------|
-| TC-010 | 正常全路径 CREATED→PASSED | FR-012 | 依次调用 enqueue/dispatch/.../judge | status=PASSED |
-| TC-011 | 非法转换抛异常 | FR-012 | QUEUED 直接调 judge() | StateMachineError |
-| TC-012 | 重试计数 ≤3 触发 RETRY | FR-013 | review_done(failed) × 3 | retry_count=3, RETRY |
-| TC-013 | 重试超限触发 ESCALATED | FR-013 | 第 4 次 handle_failure() | status=ESCALATED |
-| TC-014 | is_terminal 属性 | FR-012 | PASSED / ESCALATED | True |
-| TC-015 | can_dispatch 属性 | FR-012 | QUEUED | True; DISPATCHED → False |
+| TC-010 | 正常全路径 CREATED→PASSED | FR-014 | 依次调用 enqueue/dispatch/.../judge | status=PASSED |
+| TC-011 | 非法转换抛异常 | FR-015 | QUEUED 直接调 judge() | StateMachineError |
+| TC-012 | 重试计数 ≤3 触发 RETRY | FR-015 | review_done(failed) × 3 | retry_count=3, RETRY |
+| TC-013 | 重试超限触发 ESCALATED | FR-015 | 第 4 次 handle_failure() | status=ESCALATED |
+| TC-014 | is_terminal 属性 | FR-014 | PASSED / ESCALATED | True |
+| TC-015 | can_dispatch 属性 | FR-014 | QUEUED | True; DISPATCHED → False |
 
 #### 2.2.2 机器注册表 (MOD-003)
 
 | TC 编号 | 测试目标 | 映射 FR | 输入 | 预期输出 |
 |---------|---------|--------|------|---------|
-| TC-020 | 注册/注销机器 | FR-003 | register + unregister | 数量增减正确 |
-| TC-021 | 标签匹配 — 命中 | FR-004 | tags=["gpu"] | 返回含 gpu 标签的机器 |
-| TC-022 | 标签匹配 — 空匹配 | FR-004 | tags=["nonexistent"] | 返回 None |
-| TC-023 | 负载排序 | FR-004 | 3 台不同负载 | 返回最低负载 |
+| TC-020 | 注册/注销机器 | FR-004 | register + unregister | 数量增减正确 |
+| TC-021 | 标签匹配 — 命中 | FR-005 | tags=["gpu"] | 返回含 gpu 标签的机器 |
+| TC-022 | 标签匹配 — 空匹配 | FR-005 | tags=["nonexistent"] | 返回 None |
+| TC-023 | 负载排序 | FR-005 | 3 台不同负载 | 返回最低负载 |
 | TC-024 | 线程安全 | NFR-003 | 并发 register/set_busy | 无竞态异常 |
 
-#### 2.2.3 任务引擎 (MOD-007)
+#### 2.2.3 任务引擎 (MOD-004)
 
 | TC 编号 | 测试目标 | 映射 FR | 输入 | 预期输出 |
 |---------|---------|--------|------|---------|
-| TC-030 | 入队 + 拓扑排序 | FR-005 | 含依赖的 task 列表 | 依赖在前 |
-| TC-031 | next_batch 遵循并发限制 | FR-006 | 5 tasks, limit=2 | 返回 2 个 |
-| TC-032 | 依赖未满足不出队 | FR-005 | A→B 依赖, A 未完成 | B 不在 batch 中 |
-| TC-033 | all_done 正确判定 | FR-012 | 全部 PASSED | True |
+| TC-030 | 入队 + 拓扑排序 | FR-006 | 含依赖的 task 列表 | 依赖在前 |
+| TC-031 | next_batch 遵循并发限制 | FR-007 | 5 tasks, limit=2 | 返回 2 个 |
+| TC-032 | 依赖未满足不出队 | FR-006 | A→B 依赖, A 未完成 | B 不在 batch 中 |
+| TC-033 | all_done 正确判定 | FR-006 | 全部 PASSED | True |
+| TC-034 | Bug→修复任务注入 | FR-023 | confirmed bug report (BUG-001) | 生成 FIX-001 任务, priority=P0, 插入队列头部 |
+| TC-035 | 修复任务依赖设置 | FR-023 | FIX-001 关联原始 task_id | depends_on 为空 (独立执行), tags 含 "hotfix" |
 
-#### 2.2.4 配置 (MOD-004)
+#### 2.2.4 配置 (MOD-012)
 
 | TC 编号 | 测试目标 | 映射 FR | 输入 | 预期输出 |
 |---------|---------|--------|------|---------|
 | TC-040 | YAML 加载正确 | CON-001 | 合法 config.yaml | 属性可访问 |
 | TC-041 | 环境变量展开 | CON-001 | `${HOME}` | 实际路径 |
 | TC-042 | 缺少必选项报错 | CON-001 | 无 project_name | KeyError / ValueError |
-| TC-043 | machines 列表解析 | FR-003 | 5 台机器配置 | len(get_machines()) == 5 |
+| TC-043 | machines 列表解析 | FR-004 | 5 台机器配置 | len(get_machines()) == 5 |
 
 ### 2.3 L2 组件测试 — 外部交互模块
 
@@ -130,17 +132,19 @@
 | TC-051 | load_doc_set 路径不存在 | FR-001 | 不存在路径 | FileNotFoundError |
 | TC-052 | analyze_and_decompose 正常 | FR-002 | mock LLM → 合法 JSON | List[CodingTask] |
 | TC-053 | LLM 返回非法 JSON | FR-002 | mock → `"not json"` | JSONDecodeError / 重试 |
+| TC-054 | 任务字段完整性校验 | FR-003 | mock LLM → 合法 JSON | 每个 CodingTask 含 task_id, description, context_files, depends_on, acceptance, tags, estimated_minutes |
+| TC-055 | 任务缺少必选字段 | FR-003 | mock → 缺 acceptance 的 JSON | ValidationError / 补全重试 |
 
-#### 2.3.2 分发器 (MOD-008)
+#### 2.3.2 分发器 (MOD-006)
 
 | TC 编号 | 测试目标 | 映射 FR | Mock | 预期 |
 |---------|---------|--------|------|------|
-| TC-060 | dispatch_task 本地执行 | FR-007 | mock subprocess | TaskResult, exit_code=0 |
-| TC-061 | dispatch_task 远程 SSH | FR-007 | mock asyncssh | TaskResult |
+| TC-060 | dispatch_task 本地执行 | FR-008 | mock subprocess | TaskResult, exit_code=0 |
+| TC-061 | dispatch_task 远程 SSH | FR-008 | mock asyncssh | TaskResult |
 | TC-062 | SSH 超时 | NFR-001 | mock 超时异常 | 机器标 ERROR, 任务迁移 |
 | TC-063 | dispatch_batch 并行 | FR-008 | 3 tasks + mock | 3 个 TaskResult |
 
-#### 2.3.3 审查器 (MOD-009)
+#### 2.3.3 审查器 (MOD-007)
 
 | TC 编号 | 测试目标 | 映射 FR | Mock | 预期 |
 |---------|---------|--------|------|------|
@@ -149,30 +153,32 @@
 | TC-072 | L2 契约检查 | FR-010 | mock LLM | ReviewResult, layer=L2 |
 | TC-073 | L3 设计检查 | FR-011 | mock LLM | ReviewResult, layer=L3, 含 score |
 
-#### 2.3.4 测试运行器 (MOD-010)
+#### 2.3.4 测试运行器 (MOD-008)
 
 | TC 编号 | 测试目标 | 映射 FR | Mock | 预期 |
 |---------|---------|--------|------|------|
-| TC-080 | 找到测试文件并运行 | FR-014 | tmpdir + pytest json | TestResult, passed=True |
-| TC-081 | 无测试文件 auto-pass | FR-014 | 空目录 | TestResult(passed=True) |
-| TC-082 | 部分失败 + fallback | FR-015 | 3/4 pass, threshold=0.7 | passed=True |
-| TC-083 | 低于 fallback 阈值 | FR-015 | 1/4 pass, threshold=0.7 | passed=False |
+| TC-080 | 找到测试文件并运行 | FR-012 | tmpdir + pytest json | TestResult, passed=True |
+| TC-081 | 无测试文件 auto-pass | FR-012 | 空目录 | TestResult(passed=True) |
+| TC-082 | 部分失败 + fallback | FR-013 | 3/4 pass, threshold=0.7 | passed=True |
+| TC-083 | 低于 fallback 阈值 | FR-013 | 1/4 pass, threshold=0.7 | passed=False |
 
-#### 2.3.5 报告器 (MOD-011)
+#### 2.3.5 报告器 (MOD-010)
 
 | TC 编号 | 测试目标 | 映射 FR | Mock | 预期 |
 |---------|---------|--------|------|------|
 | TC-090 | 钉钉 webhook 发送 | FR-016 | mock httpx.post → 200 | 无异常 |
 | TC-091 | 钉钉返回 errcode≠0 | FR-016 | mock → errcode=310000 | 日志 warning |
 | TC-092 | sprint_summary Markdown | FR-017 | 5 tasks stats | 含红绿灯标记 |
+| TC-093 | Sprint 报告含完整统计 | FR-018 | 10 tasks (8 pass, 1 fail, 1 escalated) | 报告含里程碑进度 + 全量统计表 + 遗留问题列表 |
+| TC-094 | Sprint 报告零任务场景 | FR-018 | 0 tasks (空 Sprint) | 有效报告, 统计全零, 遗留问题为空 |
 
-#### 2.3.6 Git 操作 (MOD-012)
+#### 2.3.6 Git 操作 (MOD-011)
 
 | TC 编号 | 测试目标 | 映射 FR | Mock | 预期 |
 |---------|---------|--------|------|------|
-| TC-100 | commit + push | FR-018 | mock subprocess | True |
-| TC-101 | tag_sprint | FR-019 | mock subprocess | True |
-| TC-102 | sync_nodes 部分失败 | FR-020 | mock 2 ok + 1 fail | Dict{"m1":True, "m3":False} |
+| TC-100 | commit + push | FR-019 | mock subprocess | True |
+| TC-101 | tag_sprint | FR-020 | mock subprocess | True |
+| TC-102 | sync_nodes 部分失败 | FR-021 | mock 2 ok + 1 fail | Dict{"m1":True, "m3":False} |
 
 ### 2.4 L3 集成测试
 
@@ -266,3 +272,5 @@ pytest -m acceptance -s -v
 | 版本 | 日期 | 变更内容 | 作者 |
 |------|------|---------|------|
 | v1.0 | 2026-03-06 | 初始版本：4 层测试策略 + 45 个 TC + 自动化执行 | AutoDev Pipeline |
+| v1.1 | 2026-03-06 | 修正: MOD 编号与 OD-001 对齐, FR 映射修正 (A-002) | AutoDev Pipeline |
+| v1.2 | 2026-03-06 | 新增: FR-003 (TC-054~055), FR-018 (TC-093~094), FR-023 (TC-034~035) 共 6 条测试用例 (A-008) | AutoDev Pipeline |

@@ -1,9 +1,9 @@
-# AI-Dev-Pipeline — 项目规范指令
+# 团队 AI 规范指令（共享层）
 
-> **版本**: v1.0  
-> **创建日期**: 2026-03-06  
-> **适用范围**: 所有 AI 编程助手（GitHub Copilot / Claude / Cursor 等）  
+> **版本**: v1.0
+> **适用范围**: 所有 AI 编程助手（GitHub Copilot / Claude / Cursor 等）
 > **核心原则**: 文档是最重要的资产，文档驱动开发，所有设计先于编码
+> **注意**: 本文件由 team-ai-rules 自动同步生成，请勿直接编辑。
 
 ---
 
@@ -11,27 +11,29 @@
 
 **触发条件**: 每次加载本项目时，必须首先验证 `docs/` 目录下的文档体系完整性。
 
-### 必须存在的 10 个核心目录及其必要文档
+### 必须存在的 12 个核心目录及其必要文档
 
 | # | 目录 | 必须文档 | 说明 |
 |---|------|---------|------|
-| 01 | `docs/01-requirements/` | `REQ-001-系统需求规格说明书.md` | 功能需求 (FR)、非功能需求 (NFR)、约束条件 (CON) |
-| 02 | `docs/02-system-design/` | `SYS-001-系统设计说明书.md` | 系统上下文、四层架构、架构决策记录 (ADR) |
-| 03 | `docs/03-architecture/` | `ARCH-001-架构总览.md`, `ARCH-002-部署架构.md` | 架构风格、组件设计、部署拓扑 |
-| 04 | `docs/04-outline-design/` | `OD-001-模块概要设计.md`, `OD-002-数据模型设计.md`, `OD-003-接口契约设计.md` | 模块 (MOD)、数据模型 (DM)、接口 (IF) |
-| 05 | `docs/05-traceability/` | `TRACE-001-追溯矩阵.md` | FR→SYS→ARCH→MOD→IF→DM→TC 全链路追溯 |
-| 06 | `docs/06-testing/` | `TEST-001-测试策略与方案.md` | 4 层测试策略、测试用例 (TC) |
-| 07 | `docs/07-iteration/` | `ITER-001-迭代计划.md` | 里程碑、Sprint 节奏 |
-| 08 | `docs/08-operations/` | `OPS-003-风险识别与应对.md` | 风险识别 (RISK)、应对策略 |
-| 09 | `docs/09-references/` | `REF-001-术语表.md` | 术语定义、缩略语、编号体系 |
-| 10 | `docs/10-references/` | `migrated/` 目录（存档迁移的原始文档） | 历史文档存档 |
+| 01 | `docs/01-requirements/` | `REQ-001-*.md` | 功能需求 (FR)、非功能需求 (NFR)、约束条件 (CON) |
+| 02 | `docs/02-system-design/` | `SYS-001-*.md` | 系统上下文、四层架构、架构决策记录 (ADR) |
+| 03 | `docs/03-architecture/` | `ARCH-001-*.md`, `ARCH-002-*.md` | 架构风格、组件设计、部署拓扑 |
+| 04 | `docs/04-outline-design/` | `OD-001-*.md`, `OD-002-*.md`, `OD-003-*.md` | 模块 (MOD)、数据模型 (DM)、接口 (IF) |
+| 05 | `docs/05-detail-design/` | `DD-001-*.md` | 详细设计 (DD)、模块内部实现细节 |
+| 06 | `docs/06-traceability/` | `TRACE-001-*.md` | FR→SYS→ARCH→MOD→IF→DM→TC 全链路追溯 |
+| 07 | `docs/07-testing/` | `TEST-001-*.md` | 4 层测试策略、测试用例 (TC) |
+| 08 | `docs/08-iteration/` | `ITER-001-*.md` | 里程碑、Sprint 节奏 |
+| 09 | `docs/09-operations/` | `OPS-*.md` | 风险识别 (RISK)、应对策略 |
+| 10 | `docs/10-references/` | `REF-001-*.md` | 术语定义、缩略语、编号体系 |
+| 11 | `docs/11-archive/` | `migrated/` 目录（存档迁移的原始文档） | 历史文档存档 |
+| 12 | `docs/12-review/` | `README.md` | 评审流程、角色矩阵、评审记录 |
 
 ### 检查流程
 
-1. **逐一验证**上述 10 个目录是否存在
+1. **逐一验证**上述 12 个目录是否存在
 2. **逐一验证**每个目录下的必须文档是否存在
 3. 如有缺失，**立即报告**缺失项并提醒用户
-4. 全部通过后，输出简要确认：`✅ docs/ 文档体系完整性检查通过 (10/10 目录, N 个文档)`
+4. 全部通过后，输出简要确认：`✅ docs/ 文档体系完整性检查通过 (12/12 目录, N 个文档)`
 5. 如有缺失，输出：`⚠️ docs/ 文档体系不完整，缺失项: [列出缺失]`
 
 ### 辅助资源
@@ -47,8 +49,8 @@
 
 ### 前置步骤
 
-1. **读取** `docs/11-review/README.md` 获取当前角色矩阵和最新版本号
-2. **确定版本号**: 在 `docs/11-review/` 下找到已有版本文件夹，递增版本号创建新的版本文件夹
+1. **读取** `docs/12-review/README.md` 获取当前角色矩阵和最新版本号
+2. **确定版本号**: 在 `docs/12-review/` 下找到已有版本文件夹，递增版本号创建新的版本文件夹
    - 例如已有 `v1.0/`，新建 `v1.1/`（修订评审）或 `v2.0/`（全量评审）
    - 版本号规则：小版本 = 针对上轮行动项的修订评审，大版本 = 全量重新评审
 
@@ -152,8 +154,8 @@
 
 ### 评审后更新
 
-1. 更新 `docs/11-review/README.md` 的版本记录表
-2. 更新 `docs/00-navigator.md` 中的 11-review 部分（如需要）
+1. 更新 `docs/12-review/README.md` 的版本记录表
+2. 更新 `docs/00-navigator.md` 中的 12-review 部分（如需要）
 
 ---
 
@@ -172,27 +174,37 @@
 
 ### 代码规范
 
+1. 遵循 `pyproject.toml` 配置
+2. **测试**: 修改代码后必须运行相关测试
+3. **提交信息**: 使用中文，格式 `[类型] 描述`，类型包括：文档、功能、修复、重构、测试
+
+---
+
+<!-- 以下为项目特定规范，由 .ai-rules/project.copilot.md 生成 -->
+
+# AI-Dev-Pipeline — 项目特定规范（Copilot 项目层）
+
+> 本文件由 sync.sh 与共享层合并后生成最终 .github/copilot-instructions.md，请勿直接编辑。
+
+## 项目代码规范
+
 1. **Python ≥ 3.10**，遵循 `pyproject.toml` 配置
 2. **CLI 入口**: `autodev`
-3. **测试**: 修改代码后必须运行相关测试
-4. **提交信息**: 使用中文，格式 `[类型] 描述`，类型包括：文档、功能、修复、重构、测试
 
-### Git 工作流
+## Git 工作流
 
 1. **远程仓库**: `origin` → `git@github-lucas:lucas-realman/ai-dev-pipeline.git`
 2. **主分支**: `main`
 3. **推送命令**: `git push origin main`（注意使用 origin，不是 github-lucas）
 4. **标签**: 重要里程碑使用 annotated tag (`git tag -a vX.Y -m "描述"`)
 
----
-
 ## 快速参考
 
 ```
 项目根目录
-├── .github/copilot-instructions.md   ← 本文件（项目规范）
+├── .github/copilot-instructions.md   ← 本文件（项目规范，自动生成）
 ├── docs/00-navigator.md              ← 文档导航索引
-├── docs/11-review/README.md          ← 评审角色矩阵
+├── docs/12-review/README.md          ← 评审角色矩阵
 ├── orchestrator/                     ← 13 模块 Python 源码
 ├── tests/                            ← 单元测试
 └── pyproject.toml                    ← 项目配置

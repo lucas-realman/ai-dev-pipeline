@@ -103,10 +103,11 @@ jobs:
 
       - name: Run L3 integration tests
         run: |
-          pytest -m integration \
+          pytest -m "smoke or component or integration" \
             --tb=long \
             --cov=orchestrator \
-            --cov-report=term-missing
+            --cov-report=term-missing \
+            --cov-fail-under=80
 
       - name: Upload integration test report
         if: always()

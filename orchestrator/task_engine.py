@@ -1,14 +1,19 @@
 """
-AutoDev Pipeline — 任务引擎 (v3.0)
+AutoDev Pipeline — 任务引擎 (DD-MOD-004)
 管理任务队列、依赖关系、执行顺序和状态追踪。
 v3.0: next_batch() 使用 MachineRegistry 做动态分配。
 """
 from __future__ import annotations
 
+import json
 import logging
 import threading
-from collections import OrderedDict
-from typing import Dict, List, Optional, Set
+from collections import OrderedDict, deque
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Set, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .config import Config
 
 from .machine_registry import MachineRegistry
 from .state_machine import TaskStateMachine
@@ -17,28 +22,46 @@ from .task_models import CodingTask, MachineStatus, ReviewResult, TaskResult, Ta
 log = logging.getLogger("orchestrator.task_engine")
 
 
+class CycleDependencyError(Exception):
+    """任务依赖环检测异常 (ALG-009)"""
+    pass
+
+
 class TaskEngine:
     """
-    任务调度引擎 (v3.0):
+    任务调度引擎 (DD-MOD-004):
     - 维护任务列表 + 状态
-    - 依赖关系拓扑排序
+    - 依赖关系拓扑排序 + 环检测 (ALG-009)
     - next_batch() 使用 MachineRegistry 动态匹配
     - handle_*() 处理各阶段结果
     """
 
     def __init__(
         self,
+        config: Optional[Any] = None,
+        *,
         max_retries: int = 3,
         max_concurrent: int = 4,
         machine_registry: Optional[MachineRegistry] = None,
     ):
-        self.max_retries = max_retries
-        self.max_concurrent = max_concurrent
+        # 支持两种构造方式: Config 对象或显式参数
+        if config is not None and hasattr(config, 'max_retries'):
+            self.max_retries = config.max_retries
+            self.max_concurrent = config.max_concurrent
+        else:
+            self.max_retries = max_retries
+            self.max_concurrent = max_concurrent
+
         self.registry = machine_registry or MachineRegistry()
 
         # 存储: task_id → (CodingTask, TaskStateMachine)
         self._tasks: OrderedDict[str, tuple] = OrderedDict()
         self._lock = threading.Lock()
+
+        # 快照路径
+        self._snapshot_path: Optional[Path] = None
+        if config is not None and hasattr(config, 'repo_root'):
+            self._snapshot_path = config.repo_root / ".task_engine_snapshot.json"
 
         # 统计
         self.total_dispatched = 0
@@ -49,7 +72,10 @@ class TaskEngine:
     # ── 任务入队 ──
 
     def enqueue(self, tasks: List[CodingTask]) -> None:
-        """批量入队任务"""
+        """批量入队任务 (含环检测 ALG-009)"""
+        # 环检测: 构建完整依赖图 (现有 + 新增)
+        self._check_cycles(tasks)
+
         with self._lock:
             for task in tasks:
                 if task.task_id in self._tasks:
@@ -63,6 +89,109 @@ class TaskEngine:
 
     def enqueue_single(self, task: CodingTask) -> None:
         self.enqueue([task])
+
+    def add_task(self, task: CodingTask) -> None:
+        """enqueue_single 的别名, 保持 API 兼容"""
+        self.enqueue_single(task)
+
+    # ── 环检测 (ALG-009) ──
+
+    def _check_cycles(self, new_tasks: List[CodingTask]) -> None:
+        """Kahn 拓扑排序检测依赖环 (ALG-009)"""
+        # 构建合并依赖图
+        all_tasks: Dict[str, List[str]] = {}
+        with self._lock:
+            for tid, (task, _) in self._tasks.items():
+                all_tasks[tid] = list(task.depends_on)
+
+        for task in new_tasks:
+            all_tasks[task.task_id] = list(task.depends_on)
+
+        # Kahn 算法
+        in_degree: Dict[str, int] = {tid: 0 for tid in all_tasks}
+        for tid, deps in all_tasks.items():
+            for dep in deps:
+                if dep in in_degree:
+                    in_degree[tid] = in_degree.get(tid, 0)  # ensure exists
+
+        # 重新计算 in-degree
+        in_degree = {tid: 0 for tid in all_tasks}
+        for tid, deps in all_tasks.items():
+            for dep in deps:
+                if dep in all_tasks:
+                    in_degree[tid] += 1
+
+        queue: deque[str] = deque()
+        for tid, deg in in_degree.items():
+            if deg == 0:
+                queue.append(tid)
+
+        sorted_count = 0
+        while queue:
+            node = queue.popleft()
+            sorted_count += 1
+            # 找到所有以 node 为依赖的任务
+            for tid, deps in all_tasks.items():
+                if node in deps:
+                    in_degree[tid] -= 1
+                    if in_degree[tid] == 0:
+                        queue.append(tid)
+
+        if sorted_count < len(all_tasks):
+            cycle_nodes = [tid for tid, deg in in_degree.items() if deg > 0]
+            raise CycleDependencyError(
+                f"检测到任务依赖环! 涉及节点: {cycle_nodes}"
+            )
+
+    # ── 快照持久化 (ALG-009b) ──
+
+    def save_snapshot(self) -> None:
+        """保存任务状态快照"""
+        if not self._snapshot_path:
+            return
+        with self._lock:
+            data = {
+                "tasks": {
+                    tid: task.to_dict()
+                    for tid, (task, _) in self._tasks.items()
+                },
+                "stats": {
+                    "total_dispatched": self.total_dispatched,
+                    "total_passed": self.total_passed,
+                    "total_failed": self.total_failed,
+                    "total_escalated": self.total_escalated,
+                },
+            }
+        try:
+            self._snapshot_path.write_text(
+                json.dumps(data, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            log.debug("快照已保存: %s", self._snapshot_path)
+        except Exception as e:
+            log.warning("快照保存失败: %s", e)
+
+    def load_snapshot(self) -> bool:
+        """从快照恢复任务状态"""
+        if not self._snapshot_path or not self._snapshot_path.exists():
+            return False
+        try:
+            data = json.loads(self._snapshot_path.read_text(encoding="utf-8"))
+            with self._lock:
+                for tid, task_dict in data.get("tasks", {}).items():
+                    task = CodingTask.from_dict(task_dict)
+                    sm = TaskStateMachine(task, max_retries=self.max_retries)
+                    self._tasks[tid] = (task, sm)
+                stats = data.get("stats", {})
+                self.total_dispatched = stats.get("total_dispatched", 0)
+                self.total_passed = stats.get("total_passed", 0)
+                self.total_failed = stats.get("total_failed", 0)
+                self.total_escalated = stats.get("total_escalated", 0)
+            log.info("从快照恢复 %d 个任务", len(self._tasks))
+            return True
+        except Exception as e:
+            log.warning("快照加载失败: %s", e)
+            return False
 
     # ── 取下一批 (v3.0: 基于 MachineRegistry 动态分配) ──
 

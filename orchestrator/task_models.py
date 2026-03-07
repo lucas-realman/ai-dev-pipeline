@@ -1,20 +1,26 @@
 """
-AI Dev Pipeline — 数据模型
-定义 CodingTask / TaskResult / ReviewResult 等核心数据结构。
+AI Dev Pipeline — 数据模型 (DD-MOD-005)
+定义 CodingTask / TaskResult / ReviewResult / TestResult / MachineInfo 等核心数据结构。
 v3.0: 任务不绑定 target_machine，改用 tags + 动态 assigned_machine。
 """
 from __future__ import annotations
 
 import enum
+import re
 import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 
+# ── 字符白名单 (§3.2 __post_init__ 校验) ──
+
+_SAFE_ID_RE = re.compile(r'^[a-zA-Z0-9_\-/.]+$')
+
+
 # ── 任务状态枚举 ──────────────────────────────────────────
 
 class TaskStatus(enum.Enum):
-    """任务状态机 (对照设计文档 §2.3 状态图)"""
+    """任务状态机 (DD-MOD-005 §2.1)"""
     CREATED     = "created"
     QUEUED      = "queued"
     DISPATCHED  = "dispatched"
@@ -29,9 +35,10 @@ class TaskStatus(enum.Enum):
 
 
 class ReviewLayer(enum.Enum):
-    STATIC   = "static"
-    CONTRACT = "contract"
-    DESIGN   = "design"
+    """审查层级 (DD-MOD-005 §2.2)"""
+    L1_STATIC   = "static"
+    L2_CONTRACT = "contract"
+    L3_QUALITY  = "quality"
 
 
 class MachineStatus(enum.Enum):
@@ -46,13 +53,14 @@ class MachineStatus(enum.Enum):
 @dataclass
 class CodingTask:
     """
-    一个编码任务。
+    一个编码任务 (DD-MOD-005 §3)。
     v3.0 变更:
     - target_machine → 可选（向后兼容），新增 tags + assigned_machine
     - target_dir → 可选，由 AI 在 doc_analyzer 中推断
     """
     task_id: str
     description: str
+    module_name: str = ""                                    # DD-MOD-005 §3.1: 目标模块名
     tags: List[str] = field(default_factory=list)           # 能力标签 (gpu, backend, frontend)
     context_files: List[str] = field(default_factory=list)
     depends_on: List[str] = field(default_factory=list)
@@ -79,6 +87,27 @@ class CodingTask:
     started_at: Optional[float] = None
     finished_at: Optional[float] = None
 
+    def __post_init__(self) -> None:
+        """DD-MOD-005 §3.2: 创建时自动校验关键字段"""
+        # 1. task_id 格式校验
+        if not self.task_id or not _SAFE_ID_RE.match(self.task_id):
+            raise ValueError(
+                f"task_id 包含非法字符: '{self.task_id}' "
+                f"(允许: a-z A-Z 0-9 _ - / .)")
+        # 2. target_dir 路径安全校验
+        if self.target_dir and self.target_dir != "./":
+            if not _SAFE_ID_RE.match(self.target_dir):
+                raise ValueError(
+                    f"target_dir 包含非法字符: '{self.target_dir}'")
+            if '..' in self.target_dir:
+                raise ValueError(
+                    f"target_dir 禁止路径遍历 (..): '{self.target_dir}'")
+        # 3. depends_on 引用校验
+        for dep_id in self.depends_on:
+            if not _SAFE_ID_RE.match(dep_id):
+                raise ValueError(
+                    f"depends_on 包含非法 task_id: '{dep_id}'")
+
     @property
     def total_retries(self) -> int:
         return self.review_retry + self.test_retry
@@ -92,6 +121,7 @@ class CodingTask:
         return {
             "task_id": self.task_id,
             "description": self.description,
+            "module_name": self.module_name,
             "tags": self.tags,
             "assigned_machine": self.assigned_machine,
             "target_machine": self.target_machine,
@@ -120,7 +150,7 @@ class CodingTask:
 
 @dataclass
 class TaskResult:
-    """aider 编码执行结果"""
+    """aider 编码执行结果 (DD-MOD-005 §4)"""
     task_id: str
     exit_code: int = 1
     stdout: str = ""
@@ -135,7 +165,7 @@ class TaskResult:
 
 @dataclass
 class ReviewResult:
-    """自动 Review 结果"""
+    """自动 Review 结果 (DD-MOD-005 §5)"""
     passed: bool
     layer: Optional[str] = None
     issues: List[str] = field(default_factory=list)
@@ -146,21 +176,26 @@ class ReviewResult:
 
 @dataclass
 class TestResult:
-    """pytest 测试结果"""
+    """pytest 测试结果 (DD-MOD-005 §6)"""
     passed: bool
+    task_id: str = ""
     total: int = 0
     passed_count: int = 0
     failed_count: int = 0
     error_count: int = 0
+    skipped_count: int = 0
     duration_sec: float = 0.0
+    pass_rate: float = 0.0
     failures: List[str] = field(default_factory=list)
     stdout: str = ""
+    details: str = ""
+    reason: str = ""
 
 
 @dataclass
 class MachineInfo:
     """
-    机器信息模型 (v3.0)。
+    机器信息模型 (DD-MOD-005 §7)。
     从 config.yaml machines[] 加载，由 MachineRegistry 管理。
     """
     machine_id: str
@@ -173,7 +208,8 @@ class MachineInfo:
     aider_prefix: str = ""
     aider_model: str = ""
     status: MachineStatus = MachineStatus.ONLINE
-    current_task: Optional[str] = None
+    current_task_id: Optional[str] = None
+    busy_since: Optional[float] = None
 
     # 硬件信息 (可选, 手动或自动探测)
     hardware_info: Dict[str, str] = field(default_factory=dict)
@@ -195,7 +231,8 @@ class MachineInfo:
             "work_dir": self.work_dir,
             "tags": self.tags,
             "status": self.status.value,
-            "current_task": self.current_task,
+            "current_task_id": self.current_task_id,
+            "busy_since": self.busy_since,
             "hardware_info": self.hardware_info,
             "load": self.load,
         }

@@ -1,5 +1,5 @@
 """
-AutoDev Pipeline — 配置加载器 (v3.0)
+AutoDev Pipeline — 配置加载器 (DD-MOD-012)
 从 config.yaml + .env 加载并解析配置。
 v3.0 变更:
   - 新增 project / doc_set / machines (list) 支持
@@ -16,6 +16,12 @@ from typing import Any, Dict, List, Optional
 import yaml
 
 from .task_models import MachineInfo
+
+
+class ConfigSchemaError(Exception):
+    """配置 Schema 校验失败 (DD-MOD-012 ALG-025a)"""
+    pass
+
 
 _CONFIG_DIR = Path(__file__).parent
 _DEFAULT_PROJECT_ROOT = _CONFIG_DIR.parent
@@ -54,6 +60,54 @@ class Config:
             self._project_root = Path(self._data["project"]["path"]).expanduser().resolve()
         else:
             self._project_root = _DEFAULT_PROJECT_ROOT
+
+        # DD-MOD-012 ALG-025a: Schema 验证
+        self._validate_schema()
+
+    def _validate_schema(self) -> None:
+        """校验必填字段、类型和范围 (ALG-025a)"""
+        errors: List[str] = []
+
+        # orchestrator 必须存在
+        orch = self._data.get("orchestrator")
+        if not isinstance(orch, dict):
+            errors.append("缺少必填配置段: orchestrator")
+        else:
+            if "mode" not in orch:
+                errors.append("orchestrator.mode 是必填项")
+            if "current_sprint" not in orch:
+                errors.append("orchestrator.current_sprint 是必填项")
+
+        # llm 必须存在
+        llm = self._data.get("llm")
+        if not isinstance(llm, dict):
+            errors.append("缺少必填配置段: llm")
+        else:
+            for key in ("openai_api_base", "openai_api_key", "model"):
+                if not llm.get(key):
+                    errors.append(f"llm.{key} 是必填项")
+
+        # task 必须存在
+        task = self._data.get("task")
+        if not isinstance(task, dict):
+            errors.append("缺少必填配置段: task")
+        else:
+            timeout = task.get("single_task_timeout")
+            if timeout is not None and (not isinstance(timeout, (int, float)) or timeout <= 0):
+                errors.append(f"task.single_task_timeout 必须为正数, 当前值: {timeout}")
+            retries = task.get("max_retries")
+            if retries is not None and (not isinstance(retries, int) or retries < 0):
+                errors.append(f"task.max_retries 必须为非负整数, 当前值: {retries}")
+
+        # machines 类型检查
+        machines = self._data.get("machines")
+        if machines is not None and not isinstance(machines, (list, dict)):
+            errors.append("machines 必须为列表或字典")
+
+        if errors:
+            raise ConfigSchemaError(
+                "配置文件校验失败:\n" + "\n".join(f"  - {e}" for e in errors)
+            )
 
     # ── 项目配置 (v3.0 新增) ──
 

@@ -1,11 +1,12 @@
 """
-AutoDev Pipeline — 主编排器 & CLI 入口
+AutoDev Pipeline — 主编排器 & CLI 入口 (DD-MOD-013)
 """
 from __future__ import annotations
 
 import argparse
 import asyncio
 import logging
+import signal
 import sys
 import time
 from pathlib import Path
@@ -21,7 +22,7 @@ from .reporter import Reporter
 from .reviewer import AutoReviewer
 from .state_machine import TaskStateMachine
 from .task_engine import TaskEngine
-from .task_models import CodingTask, TaskStatus
+from .task_models import CodingTask, TaskResult, TaskStatus
 from .test_runner import TestRunner
 
 log = logging.getLogger("orchestrator")
@@ -30,7 +31,7 @@ MAX_ROUNDS = 20  # 主循环最大轮次
 
 
 class Orchestrator:
-    """自动化开发流水线 — 主编排器"""
+    """自动化开发流水线 — 主编排器 (DD-MOD-013)"""
 
     def __init__(self, config: Config):
         self.config = config
@@ -43,12 +44,39 @@ class Orchestrator:
         self.test_runner = TestRunner(config)
         self.reporter = Reporter(config)
         self.git_ops = GitOps(config)
+        self._shutdown = False
+
+    # ── 信号处理 (ALG-030a) ──
+
+    def _setup_signal_handlers(self) -> None:
+        """注册 SIGTERM / SIGINT 优雅关闭处理器"""
+        loop = asyncio.get_event_loop()
+        for sig in (signal.SIGTERM, signal.SIGINT):
+            loop.add_signal_handler(sig, self._handle_signal, sig)
+
+    def _handle_signal(self, sig: signal.Signals) -> None:
+        log.warning("收到信号 %s, 准备优雅关闭...", sig.name)
+        self._shutdown = True
+
+    # ── Stale-busy 检测 (ALG-030b) ──
+
+    def _check_stale_busy(self, stale_timeout: float = 1800.0) -> None:
+        """检测超时占用的机器并释放"""
+        now = time.time()
+        for m in self.registry.get_busy_machines():
+            if m.busy_since and (now - m.busy_since) > stale_timeout:
+                log.warning(
+                    "机器 %s 疑似 stale-busy (%.0fs), 释放",
+                    m.machine_id, now - m.busy_since,
+                )
+                self.registry.set_idle(m.machine_id)
 
     async def run_sprint(self, sprint_id: str, tasks: Optional[List[CodingTask]] = None) -> Dict:
         """
-        执行一轮 Sprint
+        执行一轮 Sprint (DD-MOD-013 主入口)
         如果没有传入 tasks, 则从文档集自动分解
         """
+        self._setup_signal_handlers()
         log.info("========== Sprint %s 开始 ==========", sprint_id)
 
         if tasks is None:
@@ -73,7 +101,7 @@ class Orchestrator:
 
         # 收尾
         summary = self._compute_summary(tasks)
-        report_path = self.reporter.save_sprint_report(sprint_id, tasks, summary)
+        report_path = self.reporter.generate_report(sprint_id, tasks, summary)
         await self.reporter.notify_sprint_done(sprint_id, tasks)
 
         # Git commit + tag
@@ -131,10 +159,19 @@ class Orchestrator:
 
     async def _main_loop(self, tasks: List[CodingTask]) -> None:
         """
-        主编排循环:
-        每轮: batch → dispatch → wait → review → test → judge
+        主编排循环 (DD-MOD-013):
+        每轮: batch → dispatch → review → test → judge
         """
         for round_no in range(1, MAX_ROUNDS + 1):
+            # ALG-030a: 检查优雅关闭
+            if self._shutdown:
+                log.info("收到关闭信号, 退出主循环")
+                await self.reporter.notify_shutdown("signal")
+                break
+
+            # ALG-030b: Stale-busy 检测
+            self._check_stale_busy()
+
             pending = [
                 t for t in tasks
                 if t.status not in (TaskStatus.PASSED, TaskStatus.FAILED, TaskStatus.ESCALATED)
@@ -149,7 +186,7 @@ class Orchestrator:
             batch = self.engine.next_batch()
             if not batch:
                 # 检查是否还有正在执行的任务
-                in_progress = [t for t in tasks if t.status == TaskStatus.CODING]
+                in_progress = [t for t in tasks if t.status == TaskStatus.DISPATCHED]
                 if in_progress:
                     log.info("等待 %d 个任务完成编码...", len(in_progress))
                     await asyncio.sleep(10)
@@ -158,15 +195,14 @@ class Orchestrator:
                     log.info("没有可调度的任务, 退出主循环")
                     break
 
-            # 2. 分发
+            # 2. 分发 (阻塞等待编码完成, 返回 {task_id: TaskResult})
             dispatch_results = await self._dispatch_batch(batch)
 
-            # 3. 等待编码完成
-            await self._wait_for_coding(batch)
-
-            # 4. 审查 + 测试 + 判定
+            # 3. 审查 + 测试 + 判定
             for task in batch:
-                await self._process_task_result(task)
+                result = dispatch_results.get(task.task_id)
+                if result and result.success:
+                    await self._process_task_result(task, result)
 
         else:
             log.warning("主循环达到最大轮次 %d, 强制退出", MAX_ROUNDS)
@@ -174,49 +210,30 @@ class Orchestrator:
                 if t.status not in (TaskStatus.PASSED, TaskStatus.FAILED, TaskStatus.ESCALATED):
                     t.status = TaskStatus.ESCALATED
 
-    async def _dispatch_batch(self, batch: List[CodingTask]) -> List[bool]:
-        """分发一批任务"""
-        results = []
+    async def _dispatch_batch(self, batch: List[CodingTask]) -> Dict[str, TaskResult]:
+        """分发一批任务, 返回 {task_id: TaskResult}"""
+        results: Dict[str, TaskResult] = {}
         for task in batch:
-            ok = await self.dispatcher.dispatch_task(task)
-            results.append(ok)
-            if ok:
-                self.engine.mark_dispatched(task)
+            result = await self.dispatcher.dispatch_task(task)
+            results[task.task_id] = result
+            if result.success:
+                self.engine.mark_dispatched(task.task_id)
                 await self.reporter.notify_task_dispatched(task)
+                # dispatch_task 是阻塞的 — 编码已完成, 推进状态机
+                self.engine.handle_coding_done(task.task_id, result)
             else:
-                log.warning("任务 %s 分发失败", task.task_id)
+                log.warning("任务 %s 分发失败: %s", task.task_id, result.stderr[:120])
                 task.status = TaskStatus.QUEUED
         return results
 
-    async def _wait_for_coding(self, batch: List[CodingTask]) -> None:
-        """等待编码完成 (通过轮询 aider 进程)"""
-        poll_interval = self.config.get("dispatch.poll_interval_sec", 30)
-        max_wait = self.config.get("dispatch.max_wait_sec", 1800)
-        start = time.time()
-
-        while time.time() - start < max_wait:
-            all_done = all(
-                t.status != TaskStatus.CODING for t in batch
-            )
-            if all_done:
-                break
-            await asyncio.sleep(poll_interval)
-
-            # 检查各任务 aider 进程状态
-            for task in batch:
-                if task.status == TaskStatus.CODING:
-                    done = await self.dispatcher.check_task_done(task)
-                    if done:
-                        self.engine.handle_coding_done(task)
-
-    async def _process_task_result(self, task: CodingTask) -> None:
-        """对一个完成编码的任务执行: 审查 → 测试 → 判定"""
-        if task.status not in (TaskStatus.CODED, TaskStatus.REVIEWING, TaskStatus.TESTING):
+    async def _process_task_result(self, task: CodingTask, dispatch_result: TaskResult) -> None:
+        """对一个完成编码的任务执行: 审查 → 测试 → 判定 (DD-MOD-013)"""
+        if task.status not in (TaskStatus.CODING_DONE, TaskStatus.REVIEW, TaskStatus.TESTING):
             return
 
         # 审查
-        task.status = TaskStatus.REVIEWING
-        review = await self.reviewer.review(task)
+        task.status = TaskStatus.REVIEW
+        review = await self.reviewer.review_task(task, dispatch_result)
         if not review.passed:
             task.review_retry += 1
             max_review_retry = self.config.get("retry.max_review_retry", 2)
@@ -231,7 +248,7 @@ class Orchestrator:
 
         # 测试
         task.status = TaskStatus.TESTING
-        test_result = await self.test_runner.run_tests(task)
+        test_result = await self.test_runner.run_tests(task, dispatch_result)
         if not test_result.passed:
             task.test_retry += 1
             max_test_retry = self.config.get("retry.max_test_retry", 2)

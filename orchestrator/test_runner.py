@@ -1,5 +1,5 @@
 """
-AutoDev Pipeline — 测试运行器
+AutoDev Pipeline — 测试运行器 (DD-MOD-009)
 支持:
 1. pytest 单元测试 (JSON 报告)
 2. 验收测试 (基于 acceptance criteria)
@@ -34,7 +34,7 @@ class AcceptanceCriterion:
 
 
 class TestRunner:
-    """测试运行器 — 负责在各节点上执行 pytest 并采集结果"""
+    """测试运行器 (DD-MOD-009) — 负责在各节点上执行 pytest 并采集结果"""
 
     def __init__(self, config: Config, repo_root: Optional[Path] = None):
         self.config = config
@@ -47,9 +47,9 @@ class TestRunner:
 
     # ── 主要入口 ──
 
-    async def run_tests(self, task: CodingTask) -> TestResult:
-        """对一个任务执行测试"""
-        test_files = self._find_tests_for_task(task)
+    async def run_tests(self, task: CodingTask, result: Optional["TaskResult"] = None) -> TestResult:
+        """对一个任务执行测试 (DD-MOD-009 ALG-017)"""
+        test_files = self._discover_test_files(task)
         if not test_files:
             log.info("任务 %s 没有找到测试文件, 默认通过", task.task_id)
             return TestResult(
@@ -105,7 +105,7 @@ class TestRunner:
                     test_files.append(f)
 
         if not test_files:
-            functional_tests = self._find_tests_for_task(task)
+            functional_tests = self._discover_test_files(task)
             test_files = functional_tests
 
         if not test_files:
@@ -130,33 +130,41 @@ class TestRunner:
             f"-v --tb=short -q 2>&1"
         )
 
-        stdout, returncode = await self._exec(cmd, task)
+        stdout, returncode = await self._run_pytest(cmd, task)
 
         if report_file.exists():
-            result = self._parse_json_report(task.task_id, report_file)
+            result_obj = self._parse_json_report(task.task_id, report_file)
         else:
-            result = self._parse_pytest_output(task.task_id, stdout, returncode)
+            result_obj = self._parse_pytest_output(task.task_id, stdout, returncode)
 
-        result = self._apply_fallback_threshold(result, criteria)
-        return result
+        result_obj = self._apply_fallback_threshold(result_obj, criteria)
+        return result_obj
 
     # ── 测试发现策略 ──
 
-    def _find_tests_for_task(self, task: CodingTask) -> List[Path]:
+    def _discover_test_files(self, task: CodingTask) -> List[Path]:
         """
-        三层策略查找任务相关测试文件:
-        1. 精确匹配: test_{task_id}.py
+        三层策略查找任务相关测试文件 (ALG-018):
+        1. 精确匹配: test_{task_id}.py 或 test_{module_name}.py
         2. 目录匹配: tests/{target_dir}/
         3. 模式匹配: tests/ 下包含 task_id 关键字的文件
         """
         found: List[Path] = []
 
-        # 策略 1: 精确匹配
+        # 策略 1: 精确匹配 (task_id + module_name)
         safe_id = re.sub(r"[^a-zA-Z0-9_]", "_", task.task_id).lower()
         exact_file = self.test_dir / f"test_{safe_id}.py"
         if exact_file.exists():
             found.append(exact_file)
             return found
+
+        # module_name 精确匹配 (DD-MOD-009 ALG-018 Tier 1)
+        module_name = getattr(task, 'module_name', '')
+        if module_name:
+            mod_file = self.test_dir / f"test_{module_name}.py"
+            if mod_file.exists():
+                found.append(mod_file)
+                return found
 
         # 策略 2: 目录匹配
         if task.target_dir:
@@ -317,8 +325,8 @@ class TestRunner:
 
     # ── 命令执行 ──
 
-    async def _exec(self, cmd: str, task: CodingTask) -> Tuple[str, int]:
-        """在本地执行测试命令"""
+    async def _run_pytest(self, cmd: str, task: CodingTask) -> Tuple[str, int]:
+        """在本地执行测试命令 (DD-MOD-009)"""
         log.debug("[TestRunner] %s: %s", task.task_id, cmd[:120])
         try:
             proc = await asyncio.create_subprocess_shell(
@@ -339,3 +347,27 @@ class TestRunner:
         except Exception as e:
             log.error("[TestRunner] 执行异常 %s: %s", task.task_id, e)
             return str(e), 1
+
+    # ── 验收标准构建 ──
+
+    def _build_acceptance_criteria(self, task: CodingTask) -> List[AcceptanceCriterion]:
+        """
+        从 CodingTask.acceptance 列表构建 AcceptanceCriterion 对象列表 (DD-MOD-009)。
+
+        每条 acceptance 文本会尝试从中提取测试文件模式 (glob);
+        如果无法提取, 则保留 description 供人工判定。
+        """
+        criteria: List[AcceptanceCriterion] = []
+        for idx, text in enumerate(task.acceptance or [], start=1):
+            cid = f"{task.task_id}_AC{idx}"
+            # 尝试提取 pytest 文件路径
+            m = re.search(r"(tests?/[^\s]+\.py)", text)
+            test_file = m.group(1) if m else None
+            criteria.append(
+                AcceptanceCriterion(
+                    criterion_id=cid,
+                    description=text,
+                    test_file=test_file,
+                )
+            )
+        return criteria

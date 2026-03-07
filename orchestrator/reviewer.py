@@ -29,8 +29,8 @@ class AutoReviewer:
         self.config = config
         self.repo_root = config.repo_root
 
-    async def review(self, task: CodingTask, result: TaskResult) -> ReviewResult:
-        """对编码结果执行三层 Review"""
+    async def review_task(self, task: CodingTask, result: TaskResult) -> ReviewResult:
+        """对编码结果执行三层 Review (DD-MOD-008 主入口)"""
         files = result.files_changed
         if not files:
             return ReviewResult(
@@ -40,26 +40,30 @@ class AutoReviewer:
             )
 
         log.info("[%s] Review Layer 1: 静态检查", task.task_id)
-        static_result = await self._static_check(files)
+        static_result = await self._run_l1_static(files)
         if not static_result.passed:
             return static_result
 
         log.info("[%s] Review Layer 2: 契约对齐", task.task_id)
-        contract_result = await self._contract_check(task, files)
+        contract_result = await self._run_l2_contract(task, files)
         if not contract_result.passed:
             return contract_result
 
         log.info("[%s] Review Layer 3: 设计符合度", task.task_id)
-        design_result = await self._design_check(task, files)
-        if not design_result.passed:
-            return design_result
+        quality_result = await self._run_l3_quality(task, files)
+        if not quality_result.passed:
+            return quality_result
 
-        log.info("[%s] ✅ Review 全部通过 (score=%.1f)", task.task_id, design_result.score)
-        return design_result
+        log.info("[%s] ✅ Review 全部通过 (score=%.1f)", task.task_id, quality_result.score)
+        return quality_result
+
+    # 向后兼容别名
+    async def review(self, task: CodingTask, result: TaskResult) -> ReviewResult:
+        return await self.review_task(task, result)
 
     # ── Layer 1: 静态检查 ──
 
-    async def _static_check(self, files: List[str]) -> ReviewResult:
+    async def _run_l1_static(self, files: List[str]) -> ReviewResult:
         issues = []
         for f in files:
             if not f.endswith(".py"):
@@ -104,12 +108,12 @@ class AutoReviewer:
 
     # ── Layer 2: 契约对齐 ──
 
-    async def _contract_check(self, task: CodingTask, files: List[str]) -> ReviewResult:
-        code_content = self._read_files(files)
+    async def _run_l2_contract(self, task: CodingTask, files: List[str]) -> ReviewResult:
+        code_content = self._build_code_snippet(files)
         if not code_content:
             return ReviewResult(passed=True, layer="contract", score=5.0)
 
-        contracts = self._read_contracts_for_task(task)
+        contracts = self._read_contracts(task)
         if not contracts:
             return ReviewResult(passed=True, layer="contract", score=5.0)
 
@@ -141,10 +145,10 @@ class AutoReviewer:
 
     # ── Layer 3: 设计符合度 ──
 
-    async def _design_check(self, task: CodingTask, files: List[str]) -> ReviewResult:
-        code_content = self._read_files(files)
+    async def _run_l3_quality(self, task: CodingTask, files: List[str]) -> ReviewResult:
+        code_content = self._build_code_snippet(files)
         if not code_content:
-            return ReviewResult(passed=True, layer="design", score=4.0)
+            return ReviewResult(passed=True, layer="quality", score=3.5)
 
         prompt = f"""你是一个高级代码审查员。请根据任务描述评审以下代码。
 
@@ -171,11 +175,11 @@ class AutoReviewer:
 
             if avg_score >= threshold:
                 return ReviewResult(
-                    passed=True, layer="design", score=avg_score,
+                    passed=True, layer="quality", score=avg_score,
                     scores=data.get("scores", {}), issues=data.get("issues", []),
                 )
             return ReviewResult(
-                passed=False, layer="design", score=avg_score,
+                passed=False, layer="quality", score=avg_score,
                 scores=data.get("scores", {}),
                 issues=data.get("issues", ["设计评分低于阈值"]),
                 fix_instruction=data.get("fix_instruction",
@@ -183,12 +187,14 @@ class AutoReviewer:
             )
         except Exception as e:
             log.warning("[%s] Layer 3 LLM 调用失败, 降级通过: %s", task.task_id, e)
-            return ReviewResult(passed=True, layer="design", score=4.0)
+            return ReviewResult(passed=True, layer="quality", score=3.5)
 
     # ── LLM 调用 ──
 
     async def _call_llm(self, prompt: str) -> str:
+        """调用 OpenAI 兼容 API (ALG-032: 3× 指数退避重试)"""
         import httpx
+
         url = f"{self.config.openai_api_base}/chat/completions"
         headers = {
             "Authorization": f"Bearer {self.config.openai_api_key}",
@@ -200,15 +206,29 @@ class AutoReviewer:
             "temperature": 0.1,
             "max_tokens": 2048,
         }
-        async with httpx.AsyncClient(timeout=120) as client:
-            resp = await client.post(url, headers=headers, json=payload)
-            resp.raise_for_status()
-            data = resp.json()
-            return data["choices"][0]["message"]["content"]
+
+        last_err: Optional[Exception] = None
+        for attempt in range(1, self._LLM_MAX_RETRIES + 1):
+            try:
+                async with httpx.AsyncClient(timeout=120) as client:
+                    resp = await client.post(url, headers=headers, json=payload)
+                    resp.raise_for_status()
+                    data = resp.json()
+                    return data["choices"][0]["message"]["content"]
+            except Exception as exc:
+                last_err = exc
+                if attempt < self._LLM_MAX_RETRIES:
+                    wait = self._LLM_BACKOFF_BASE ** attempt
+                    log.warning(
+                        "LLM 调用失败 (第 %d/%d 次), %.1fs 后重试: %s",
+                        attempt, self._LLM_MAX_RETRIES, wait, exc,
+                    )
+                    await asyncio.sleep(wait)
+        raise RuntimeError(f"LLM 调用 {self._LLM_MAX_RETRIES} 次均失败: {last_err}")
 
     # ── 文件读取 ──
 
-    def _read_files(self, files: List[str]) -> str:
+    def _build_code_snippet(self, files: List[str]) -> str:
         parts = []
         for f in files:
             path = self.repo_root / f
@@ -228,7 +248,7 @@ class AutoReviewer:
                         pass
         return "\n\n".join(parts)
 
-    def _read_contracts_for_task(self, task: CodingTask) -> str:
+    def _read_contracts(self, task: CodingTask) -> str:
         contracts_dir = self.repo_root / "contracts"
         if not contracts_dir.exists():
             return ""

@@ -1,5 +1,5 @@
 """
-AutoDev Pipeline — 任务状态机
+AutoDev Pipeline — 任务状态机 (DD-MOD-006)
 实现任务状态流转:
   CREATED → QUEUED → DISPATCHED → CODING_DONE → REVIEW
   → TESTING → JUDGING → PASSED / RETRY / ESCALATED
@@ -8,16 +8,19 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Optional
+from typing import Callable, Optional
 
 from .task_models import CodingTask, ReviewResult, TaskResult, TaskStatus, TestResult
 
 log = logging.getLogger("orchestrator.state_machine")
 
+# 状态变更回调类型
+OnStateChange = Callable[[str, TaskStatus, TaskStatus], None]
+
 # ── 合法转换表 ──────────────────────────────────────────
 
 _TRANSITIONS = {
-    TaskStatus.CREATED:     [TaskStatus.QUEUED],
+    TaskStatus.CREATED:     [TaskStatus.QUEUED, TaskStatus.ESCALATED],
     TaskStatus.QUEUED:      [TaskStatus.DISPATCHED],
     TaskStatus.DISPATCHED:  [TaskStatus.CODING_DONE, TaskStatus.RETRY, TaskStatus.ESCALATED],
     TaskStatus.CODING_DONE: [TaskStatus.REVIEW],
@@ -37,13 +40,19 @@ class StateMachineError(Exception):
 
 class TaskStateMachine:
     """
-    管理单个任务的状态流转。
+    管理单个任务的状态流转 (DD-MOD-006)。
     所有状态变更都经过此类校验, 确保不会出现非法跳转。
     """
 
-    def __init__(self, task: CodingTask, max_retries: int = 3):
+    def __init__(
+        self,
+        task: CodingTask,
+        max_retries: int = 3,
+        on_state_change: Optional[OnStateChange] = None,
+    ):
         self.task = task
         self.max_retries = max_retries
+        self._on_state_change = on_state_change
 
     def _transit(self, new_status: TaskStatus) -> None:
         old = self.task.status
@@ -55,6 +64,12 @@ class TaskStateMachine:
             )
         self.task.status = new_status
         log.info("[%s] %s → %s", self.task.task_id, old.value, new_status.value)
+        # 触发回调
+        if self._on_state_change:
+            try:
+                self._on_state_change(self.task.task_id, old, new_status)
+            except Exception as e:
+                log.warning("[%s] on_state_change 回调异常: %s", self.task.task_id, e)
 
     # ── 便捷方法 ──
 

@@ -1,5 +1,5 @@
 """
-AutoDev Pipeline — Git 操作封装
+AutoDev Pipeline — Git 操作封装 (DD-MOD-011)
 支持: pull / commit / push / tag / sync_nodes (多节点同步)
 """
 from __future__ import annotations
@@ -16,13 +16,14 @@ log = logging.getLogger("orchestrator.git_ops")
 
 
 class GitOps:
-    """Git 操作工具"""
+    """Git 操作工具 (DD-MOD-011)"""
 
     def __init__(self, config: Config, repo_root: Optional[Path] = None):
         self.config = config
         self.repo_root = repo_root or config.repo_root
         self.branch = config.get("project.branch", "main") or "main"
         self.remote = config.get("git.remote", "origin") or "origin"
+        self.push_count: int = 0  # 累计推送次数 (DD-MOD-011)
 
     async def pull(self, remote: Optional[str] = None, branch: Optional[str] = None) -> bool:
         """拉取远端最新代码"""
@@ -31,9 +32,12 @@ class GitOps:
         cmd = f"git -C {self.repo_root} pull {r} {b} --rebase"
         return await self._run(cmd, f"git pull {r} {b}")
 
-    async def commit(self, message: str, add_all: bool = True) -> bool:
-        """提交变更"""
-        if add_all:
+    async def commit(self, message: str, paths: Optional[List[str]] = None) -> bool:
+        """提交变更 (DD-MOD-011: paths=None 等同 add_all)"""
+        if paths:
+            paths_str = " ".join(str(p) for p in paths)
+            await self._run(f"git -C {self.repo_root} add {paths_str}", "git add paths")
+        else:
             await self._run(f"git -C {self.repo_root} add -A", "git add -A")
         cmd = f'git -C {self.repo_root} commit -m "{message}"'
         return await self._run(cmd, "git commit")
@@ -43,7 +47,10 @@ class GitOps:
         r = remote or self.remote
         b = branch or self.branch
         cmd = f"git -C {self.repo_root} push {r} {b}"
-        return await self._run(cmd, f"git push {r} {b}")
+        ok = await self._run(cmd, f"git push {r} {b}")
+        if ok:
+            self.push_count += 1
+        return ok
 
     async def tag_sprint(self, tag: str, message: Optional[str] = None) -> bool:
         """创建 sprint tag"""

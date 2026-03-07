@@ -1,5 +1,5 @@
 """
-AutoDev Pipeline — 文档解析器 (v2 兼容层)
+AutoDev Pipeline — 文档解析器 (DD-MOD-002 / v2 兼容层)
 向后兼容 v2 的 DocParser 接口, 内部委托给 DocAnalyzer。
 
 如果项目仍使用 v2 格式的任务卡 (W0-W5 表格), 可直接使用此模块。
@@ -10,7 +10,10 @@ from __future__ import annotations
 import logging
 import re
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .config import Config
 
 from .task_models import CodingTask
 
@@ -38,12 +41,20 @@ MACHINE_DEFAULT_DIR: Dict[str, str] = {
 
 class DocParser:
     """
-    解析 Sprint 任务卡 + 设计文档 → 生成 CodingTask 列表。
+    解析 Sprint 任务卡 + 设计文档 → 生成 CodingTask 列表 (DD-MOD-002)。
     兼容 v2 格式, 新项目建议使用 DocAnalyzer。
     """
 
-    def __init__(self, repo_path: str):
-        self.repo_path = Path(repo_path)
+    def __init__(self, config: Any):
+        """
+        支持两种构造方式:
+        1. DocParser(config: Config)  — 推荐 (DD-MOD-002)
+        2. DocParser(repo_path: str)  — 兼容
+        """
+        if hasattr(config, 'repo_root'):
+            self.repo_path = Path(config.repo_root)
+        else:
+            self.repo_path = Path(str(config))
 
     def parse_task_card(
         self,

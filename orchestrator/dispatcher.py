@@ -1,7 +1,7 @@
 """
-AutoDev Pipeline — SSH 分发器 (v3.0)
+AutoDev Pipeline — SSH 分发器 (DD-MOD-007)
 通过 SSH 在远程机器上执行 aider 编码任务。
-v3.0: 使用 MachineRegistry 获取机器信息, 支持动态分配。
+支持: MachineRegistry 动态分配, SSH 预检, aider 版本校验。
 """
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ import socket
 import tempfile
 import time
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from .config import Config
 from .machine_registry import MachineRegistry
@@ -24,8 +24,8 @@ log = logging.getLogger("orchestrator.dispatcher")
 
 class Dispatcher:
     """
-    SSH 分发器: 将 CodingTask 发送到目标机器并执行 aider。
-    v3.0: 从 MachineRegistry 获取机器信息, 而非 config.get_machines()。
+    SSH 分发器 (DD-MOD-007): 将 CodingTask 发送到目标机器并执行 aider。
+    支持 MachineRegistry 动态分配; SSH 连通预检 (ALG-013a); aider 版本锁定 (ALG-013b)。
     """
 
     def __init__(self, config: Config, registry: Optional[MachineRegistry] = None):
@@ -60,7 +60,7 @@ class Dispatcher:
         return machine.host in self._local_ips
 
     async def dispatch_task(self, task: CodingTask) -> TaskResult:
-        """在目标机器上执行 aider 编码任务"""
+        """在目标机器上执行 aider 编码任务 (ALG-013, 含 SSH 预检)"""
         machine = self._get_machine(task)
         if not machine:
             return TaskResult(
@@ -68,6 +68,28 @@ class Dispatcher:
                 exit_code=1,
                 stderr=f"未找到机器: {task.effective_machine}",
             )
+
+        # ★ ALG-013a: SSH 连接预检
+        if not self._is_local(machine):
+            ok = await self._ssh_pre_check(machine)
+            if not ok:
+                if self.registry:
+                    self.registry.set_offline(machine.machine_id)
+                return TaskResult(
+                    task_id=task.task_id,
+                    exit_code=1,
+                    stderr=f"机器 {machine.machine_id} SSH 预检失败",
+                )
+
+        # ★ ALG-013b: aider 版本锁定
+        expected_ver = getattr(self.config, "aider_version", "")
+        if expected_ver and not self._is_local(machine):
+            ver_ok, actual_ver = await self._check_aider_version(machine, expected_ver)
+            if not ver_ok:
+                log.warning(
+                    "机器 %s aider 版本不匹配: 期望 %s, 实际 %s",
+                    machine.machine_id, expected_ver, actual_ver,
+                )
 
         start_time = time.time()
         log.info("[%s] 分发到 %s (%s@%s), 目录: %s",
@@ -323,3 +345,111 @@ exit $AIDER_EXIT
         if not files:
             files = [target_dir]
         return files
+
+    # ── SSH 辅助: 预检 / 版本检查 / 简易执行 ──
+
+    async def _ssh_pre_check(self, machine: MachineInfo) -> bool:
+        """
+        轻量级 SSH 连通性检查 (ALG-013a)。
+
+        成功: 返回 True
+        失败: 记录日志 + 返回 False (调用方负责置为 OFFLINE)
+        """
+        cmd = [
+            "ssh", "-T",
+            "-o", "ConnectTimeout=5",
+            "-o", "BatchMode=yes",
+            "-p", str(machine.port),
+            f"{machine.user}@{machine.host}",
+            "echo ok",
+        ]
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=10)
+            if proc.returncode == 0 and "ok" in stdout.decode():
+                return True
+            log.warning(
+                "机器 %s SSH 预检失败: exit=%d, %s",
+                machine.machine_id, proc.returncode,
+                stderr.decode("utf-8", errors="replace"),
+            )
+            return False
+        except asyncio.TimeoutError:
+            log.warning("机器 %s SSH 预检超时 (10s)", machine.machine_id)
+            return False
+        except Exception as exc:
+            log.warning("机器 %s SSH 预检异常: %s", machine.machine_id, exc)
+            return False
+
+    async def _check_aider_version(
+        self, machine: MachineInfo, expected: str,
+    ) -> Tuple[bool, str]:
+        """
+        远程执行 ``aider --version``, 与期望版本比较 (ALG-013b)。
+
+        Returns:
+            (match, actual_version_str)
+        """
+        cmd = f"{machine.aider_prefix} && aider --version 2>/dev/null || echo unknown"
+        try:
+            raw = await self._ssh_exec_simple(machine, cmd, timeout=10)
+            ver_str = raw.replace("aider", "").strip()
+            return (ver_str == expected, ver_str)
+        except Exception:
+            return (False, "unknown")
+
+    async def _ssh_exec_simple(
+        self, machine: MachineInfo, cmd: str, *, timeout: int = 10,
+    ) -> str:
+        """
+        在远程机器上执行一条简单命令并返回 stdout (UTF-8)。
+
+        适用于轻量脚本 (版本检查、echo 等), 不做 SCP / 文件上传。
+        """
+        ssh_cmd = [
+            "ssh", "-T",
+            "-o", "ConnectTimeout=5",
+            "-o", "BatchMode=yes",
+            "-p", str(machine.port),
+            f"{machine.user}@{machine.host}",
+            cmd,
+        ]
+        proc = await asyncio.create_subprocess_exec(
+            *ssh_cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+        return stdout.decode("utf-8", errors="replace").strip()
+
+    async def check_task_done(self, task: CodingTask) -> bool:
+        """
+        检查远程机器上的 aider 任务是否已完成。
+
+        通过检测远程临时指令文件是否已删除来判定 —
+        ALG-014 脚本末尾会 ``rm -f {msg_remote_path}``。
+
+        Returns:
+            True 表示任务已完成 (指令文件已被清理)
+        """
+        machine = self._get_machine(task)
+        if not machine:
+            return True  # 无法查到机器, 视为完成 (由调用方处理异常)
+
+        if self._is_local(machine):
+            msg_path = Path(f"/tmp/aider_msg_{task.task_id}")
+            return not msg_path.exists()
+
+        try:
+            raw = await self._ssh_exec_simple(
+                machine,
+                f"test -f /tmp/aider_msg_{task.task_id} && echo running || echo done",
+                timeout=10,
+            )
+            return "done" in raw
+        except Exception:
+            return False

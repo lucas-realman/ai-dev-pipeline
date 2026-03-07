@@ -90,7 +90,15 @@ class MachineRegistry:
         with self._lock:
             return [
                 m for m in self._machines.values()
-                if m.status == MachineStatus.ONLINE and m.current_task is None
+                if m.status == MachineStatus.ONLINE and m.current_task_id is None
+            ]
+
+    def get_busy_machines(self) -> List[MachineInfo]:
+        """获取所有忙碌机器 (DD-MOD-003)"""
+        with self._lock:
+            return [
+                m for m in self._machines.values()
+                if m.status == MachineStatus.BUSY
             ]
 
     def get_online_count(self) -> int:
@@ -157,14 +165,24 @@ class MachineRegistry:
         with self._lock:
             if machine_id in self._machines:
                 self._machines[machine_id].status = MachineStatus.BUSY
-                self._machines[machine_id].current_task = task_id
+                self._machines[machine_id].current_task_id = task_id
+                self._machines[machine_id].busy_since = time.time()
 
     def set_idle(self, machine_id: str) -> None:
         """标记机器为空闲"""
         with self._lock:
             if machine_id in self._machines:
                 self._machines[machine_id].status = MachineStatus.ONLINE
-                self._machines[machine_id].current_task = None
+                self._machines[machine_id].current_task_id = None
+                self._machines[machine_id].busy_since = None
+
+    def set_offline(self, machine_id: str) -> None:
+        """标记机器为离线 (DD-MOD-003)"""
+        with self._lock:
+            if machine_id in self._machines:
+                self._machines[machine_id].status = MachineStatus.OFFLINE
+                self._machines[machine_id].current_task_id = None
+                self._machines[machine_id].busy_since = None
 
     def update_load(self, machine_id: str, load: Dict[str, float]) -> None:
         """更新机器负载信息 (心跳上报)"""

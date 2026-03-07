@@ -1,5 +1,5 @@
 """
-AutoDev Pipeline — 文档集分析器 (v3.0 新增)
+AutoDev Pipeline — 文档集分析器 (DD-MOD-001)
 取代 v2 的 DocParser, 实现通用化的文档集 → 任务分解。
 
 核心能力:
@@ -15,7 +15,10 @@ import json
 import logging
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .config import Config
 
 from .task_models import CodingTask
 
@@ -24,7 +27,7 @@ log = logging.getLogger("orchestrator.doc_analyzer")
 
 class DocAnalyzer:
     """
-    通用文档集分析器。
+    通用文档集分析器 (DD-MOD-001)。
 
     替代 v2 DocParser 的静态解析, 使用 LLM 理解任意格式的文档集,
     输出标准化的 CodingTask 列表。
@@ -36,19 +39,26 @@ class DocAnalyzer:
     4. 转换为 CodingTask 列表
     """
 
-    def __init__(
-        self,
-        project_path: str,
-        doc_set_config: Dict[str, str],
-        llm_base: str = "",
-        llm_key: str = "",
-        llm_model: str = "",
-    ):
-        self.project_path = Path(project_path)
-        self.doc_set_config = doc_set_config
-        self.llm_base = llm_base
-        self.llm_key = llm_key
-        self.llm_model = llm_model
+    def __init__(self, config: Any):
+        """
+        支持两种构造方式:
+        1. DocAnalyzer(config: Config)  — 推荐 (DD-MOD-001)
+        2. DocAnalyzer(project_path, doc_set_config, llm_base, llm_key, llm_model) — 兼容
+        """
+        if hasattr(config, 'project_path'):
+            # 新 API: 接受 Config 对象
+            self.project_path = Path(config.project_path)
+            self.doc_set_config = config.doc_set
+            self.llm_base = config.openai_api_base
+            self.llm_key = config.openai_api_key
+            self.llm_model = config.aider_model
+        else:
+            # 兼容旧 API: 接受独立参数
+            self.project_path = Path(config)
+            self.doc_set_config = {}
+            self.llm_base = ""
+            self.llm_key = ""
+            self.llm_model = ""
 
     # ── 文档加载 ──
 
@@ -195,8 +205,16 @@ class DocAnalyzer:
 
     # ── LLM 调用 ──
 
+    _LLM_MAX_RETRIES = 3
+    _LLM_BACKOFF_BASE = 2.0  # 秒
+
     async def _call_llm(self, prompt: str) -> str:
-        """调用 OpenAI 兼容 API"""
+        """
+        调用 OpenAI 兼容 API (ALG-032: 3× 指数退避重试)。
+
+        Raises:
+            RuntimeError: LLM 未配置或 3 次重试后仍失败
+        """
         import httpx
 
         if not self.llm_base or not self.llm_key:
@@ -214,11 +232,24 @@ class DocAnalyzer:
             "max_tokens": 4096,
         }
 
-        async with httpx.AsyncClient(timeout=180) as client:
-            resp = await client.post(url, headers=headers, json=payload)
-            resp.raise_for_status()
-            data = resp.json()
-            return data["choices"][0]["message"]["content"]
+        last_err: Optional[Exception] = None
+        for attempt in range(1, self._LLM_MAX_RETRIES + 1):
+            try:
+                async with httpx.AsyncClient(timeout=180) as client:
+                    resp = await client.post(url, headers=headers, json=payload)
+                    resp.raise_for_status()
+                    data = resp.json()
+                    return data["choices"][0]["message"]["content"]
+            except Exception as exc:
+                last_err = exc
+                if attempt < self._LLM_MAX_RETRIES:
+                    wait = self._LLM_BACKOFF_BASE ** attempt
+                    log.warning(
+                        "LLM 调用失败 (第 %d/%d 次), %.1fs 后重试: %s",
+                        attempt, self._LLM_MAX_RETRIES, wait, exc,
+                    )
+                    await asyncio.sleep(wait)
+        raise RuntimeError(f"LLM 调用 {self._LLM_MAX_RETRIES} 次均失败: {last_err}")
 
     # ── 解析 ──
 

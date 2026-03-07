@@ -1,5 +1,5 @@
 """
-AutoDev Pipeline — 报告与通知
+AutoDev Pipeline — 报告与通知 (DD-MOD-010)
 支持:
 1. 钉钉自定义 Webhook 机器人 (简单, 推荐)
 2. 钉钉企业内部应用 OpenAPI
@@ -26,7 +26,7 @@ log = logging.getLogger("orchestrator.reporter")
 
 
 class Reporter:
-    """通知 & 报告器"""
+    """通知 & 报告器 (DD-MOD-010)"""
 
     def __init__(self, config: Config):
         self.config = config
@@ -108,9 +108,19 @@ class Reporter:
     async def notify_error(self, message: str) -> None:
         await self._send_dingtalk("流水线异常", f"## ⚠️ 流水线异常\n{message}")
 
+    async def notify_shutdown(self, reason: str = "normal") -> None:
+        """流水线关闭通知 (DD-MOD-010)"""
+        text = (
+            f"## 🛑 流水线关闭\n"
+            f"- **原因**: {reason}\n"
+            f"- **耗时**: {self._elapsed()}\n"
+        )
+        await self._send_dingtalk("流水线关闭", text)
+
     # ── 本地报告 ──
 
-    def save_sprint_report(self, sprint_id: str, tasks: List[CodingTask], summary: Dict) -> str:
+    def generate_report(self, sprint_id: str, tasks: List[CodingTask], summary: Dict) -> str:
+        """生成 Sprint 报告 (DD-MOD-010 主入口)"""
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"sprint_{sprint_id}_{ts}.md"
         filepath = self.reports_dir / filename
@@ -141,6 +151,10 @@ class Reporter:
         filepath.write_text("\n".join(lines), encoding="utf-8")
         log.info("Sprint 报告已保存: %s", filepath)
         return str(filepath)
+
+    # 向后兼容别名
+    def save_sprint_report(self, sprint_id: str, tasks: List[CodingTask], summary: Dict) -> str:
+        return self.generate_report(sprint_id, tasks, summary)
 
     # ── 内部方法 ──
 

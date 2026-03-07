@@ -34,12 +34,14 @@
 ### 2. "评审" 指令
 
 当用户说 **"评审"** 时：
-1. 读取 `docs/12-review/README.md` 获取角色矩阵
+1. 读取 `docs/12-review/README.md` 获取角色矩阵与技术评审维度
 2. 确定新版本号，创建 `docs/12-review/vX.Y/`
-3. 为每个角色生成独立评审意见文件
-4. 生成 `评审总结.md` 汇总所有意见
-5. 生成 `ACTION-ITEMS.md` 行动项跟踪
-6. 更新 `docs/12-review/README.md` 版本记录
+3. **阶段一**: 为每个角色生成独立评审意见文件
+4. **阶段二**: 生成 4 份技术可行性专项评审报告
+5. 生成 `评审总结.md` 汇总所有意见
+6. 生成 `ACTION-ITEMS.md` 行动项跟踪
+7. 更新 `docs/12-review/README.md` 版本记录
+8. **打 Git Tag**: `git tag -a review-vX.Y -m "评审 vX.Y: {范围} — {结论}"` 并推送
 
 详细模板和格式规范见 `.github/copilot-instructions.md`。
 

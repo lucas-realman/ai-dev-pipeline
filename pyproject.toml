@@ -27,6 +27,7 @@ dev = [
     "pytest>=7.0",
     "pytest-json-report>=1.5",
     "pytest-asyncio>=0.21",
+    "pytest-cov>=4.0",
     "ruff>=0.1.0",
 ]
 
@@ -43,3 +44,9 @@ select = ["E", "W", "F", "I"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+markers = [
+    "smoke: L1 冒烟测试 — 每次 commit 执行",
+    "component: L2 组件测试 — 每个模块核心逻辑",
+    "integration: L3 集成测试 — 模块间端到端链路",
+    "acceptance: L4 验收测试 — 里程碑人工+自动验收",
+]

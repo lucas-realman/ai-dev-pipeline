@@ -1,0 +1,105 @@
+# ============================================================
+# 测试用合法配置 — config_valid.yaml
+# 对齐 orchestrator/config.yaml 结构, 用于 L2 组件测试
+# ============================================================
+
+orchestrator:
+  mode: sprint
+  current_sprint: 1
+  poll_interval: 5
+  max_concurrent: 2
+  port: 9500
+
+project:
+  name: test-project
+  path: ./
+  repo_url: ""
+  branch: main
+
+doc_set:
+  requirements: "docs/*需求*.md"
+  design: "docs/*设计*.md"
+
+llm:
+  openai_api_base: ${OPENAI_API_BASE}
+  openai_api_key: ${OPENAI_API_KEY}
+  model: ${AIDER_MODEL}
+  timeout: 60
+  max_tokens: 4096
+
+machines:
+  - machine_id: test_gpu
+    display_name: "Test GPU"
+    host: 10.0.0.1
+    port: 22
+    user: testuser
+    work_dir: ~/test-project
+    tags: [gpu, python, cuda]
+    aider_prefix: ""
+
+  - machine_id: test_cpu
+    display_name: "Test CPU"
+    host: 10.0.0.2
+    port: 22
+    user: testuser
+    work_dir: ~/test-project
+    tags: [cpu, python, frontend]
+    aider_prefix: ""
+
+  - machine_id: test_deploy
+    display_name: "Test Deploy"
+    host: 10.0.0.3
+    port: 22
+    user: testuser
+    work_dir: ~/test-project
+    tags: [linux, deploy, docker]
+    aider_prefix: ""
+
+  - machine_id: test_data
+    display_name: "Test Data"
+    host: 10.0.0.4
+    port: 22
+    user: testuser
+    work_dir: ~/test-project
+    tags: [data, scripts]
+    aider_prefix: ""
+
+  - machine_id: test_orch
+    display_name: "Test Orchestrator"
+    host: 10.0.0.5
+    port: 22
+    user: testuser
+    work_dir: ~/test-project
+    tags: [orchestrator, testing, python]
+    aider_prefix: ""
+
+task:
+  max_retries: 3
+  single_task_timeout: 60
+  concurrent_limit: 2
+
+git:
+  branch: main
+  bare_repo: ""
+  auto_tag_on_sprint_end: true
+
+testing:
+  run_on: test_orch
+  pytest_args: "-v --tb=short"
+  pass_threshold: 4.0
+  test_pass_rate_threshold: 0.8
+  report_dir: reports/
+
+notification:
+  dingtalk_webhook: ""
+  dingtalk_webhook_secret: ""
+  dingtalk_app_key: ""
+  dingtalk_app_secret: ""
+  at_mobiles: []
+  at_all: false
+
+paths:
+  task_card: "docs/Sprint任务卡.md"
+  design_doc: "docs/系统概要设计.md"
+  contracts_dir: contracts/
+  log_dir: logs/

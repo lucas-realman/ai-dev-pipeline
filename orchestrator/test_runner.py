@@ -72,7 +72,7 @@ class TestRunner:
             f"-v --tb=short -q 2>&1"
         )
 
-        stdout, returncode = await self._exec(cmd, task)
+        stdout, returncode = await self._run_pytest(cmd, task)
 
         if report_file.exists():
             return self._parse_json_report(task.task_id, report_file)

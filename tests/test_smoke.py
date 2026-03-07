@@ -11,6 +11,7 @@ import pytest
 #  导入 & 版本
 # ═══════════════════════════════════════════════════════════
 
+@pytest.mark.smoke
 def test_import_all_modules():
     """所有 orchestrator 子模块都能正常 import"""
     modules = [
@@ -34,6 +35,7 @@ def test_import_all_modules():
         assert mod is not None, f"Failed to import {mod_name}"
 
 
+@pytest.mark.smoke
 def test_version():
     import orchestrator
     assert orchestrator.__version__ == "3.0.0"
@@ -43,6 +45,7 @@ def test_version():
 #  task_models (DD-MOD-005)
 # ═══════════════════════════════════════════════════════════
 
+@pytest.mark.smoke
 def test_task_models_basic():
     """CodingTask / MachineInfo 创建 + 默认值"""
     from orchestrator.task_models import CodingTask, MachineInfo, MachineStatus, TaskStatus
@@ -71,6 +74,7 @@ def test_task_models_basic():
     assert m.busy_since is None
 
 
+@pytest.mark.smoke
 def test_task_id_validation():
     """CodingTask.__post_init__ 校验非法字段 (DD-MOD-005 §3.2)"""
     from orchestrator.task_models import CodingTask
@@ -86,6 +90,7 @@ def test_task_id_validation():
     assert t.task_id == "T-001/sub.task"
 
 
+@pytest.mark.smoke
 def test_review_layer_enum():
     """ReviewLayer 枚举映射 (DD-MOD-005 §2.2)"""
     from orchestrator.task_models import ReviewLayer
@@ -95,6 +100,7 @@ def test_review_layer_enum():
     assert ReviewLayer.L3_QUALITY.value == "quality"
 
 
+@pytest.mark.smoke
 def test_task_result_success():
     """TaskResult.success 属性 (DD-MOD-005 §4)"""
     from orchestrator.task_models import TaskResult
@@ -106,6 +112,7 @@ def test_task_result_success():
     assert r_fail.success is False
 
 
+@pytest.mark.smoke
 def test_coding_task_serialization():
     """CodingTask.to_dict / from_dict 往返"""
     from orchestrator.task_models import CodingTask, TaskStatus
@@ -124,6 +131,7 @@ def test_coding_task_serialization():
 #  machine_registry (DD-MOD-003)
 # ═══════════════════════════════════════════════════════════
 
+@pytest.mark.smoke
 def test_machine_registry_basic():
     """MachineRegistry 注册 / 查询 / 状态管理"""
     from orchestrator.machine_registry import MachineRegistry
@@ -161,6 +169,7 @@ def test_machine_registry_basic():
 #  state_machine (DD-MOD-006)
 # ═══════════════════════════════════════════════════════════
 
+@pytest.mark.smoke
 def test_state_machine_transitions():
     """TaskStateMachine 完整 happy-path 流转"""
     from orchestrator.state_machine import TaskStateMachine
@@ -205,6 +214,7 @@ def test_state_machine_transitions():
     assert transitions[0] == ("T-002", TaskStatus.CREATED, TaskStatus.QUEUED)
 
 
+@pytest.mark.smoke
 def test_state_machine_illegal_transition():
     """非法状态转换抛出 StateMachineError"""
     from orchestrator.state_machine import TaskStateMachine, StateMachineError
@@ -218,6 +228,7 @@ def test_state_machine_illegal_transition():
         sm.dispatch()
 
 
+@pytest.mark.smoke
 def test_state_machine_retry_flow():
     """Review 失败 → RETRY → 重新排队"""
     from orchestrator.state_machine import TaskStateMachine
@@ -245,6 +256,7 @@ def test_state_machine_retry_flow():
 #  task_engine (DD-MOD-004)
 # ═══════════════════════════════════════════════════════════
 
+@pytest.mark.smoke
 def test_task_engine_basic():
     """TaskEngine 入队 + next_batch + mark_dispatched"""
     from orchestrator.machine_registry import MachineRegistry
@@ -274,6 +286,7 @@ def test_task_engine_basic():
     assert t1.status == TaskStatus.CODING_DONE
 
 
+@pytest.mark.smoke
 def test_task_engine_add_task_alias():
     """add_task 是 enqueue_single 的别名"""
     from orchestrator.task_engine import TaskEngine
@@ -289,6 +302,7 @@ def test_task_engine_add_task_alias():
     assert task.status == TaskStatus.QUEUED  # enqueue 后变 QUEUED
 
 
+@pytest.mark.smoke
 def test_task_engine_cycle_detection():
     """检测循环依赖 (ALG-009)"""
     from orchestrator.task_engine import TaskEngine, CycleDependencyError

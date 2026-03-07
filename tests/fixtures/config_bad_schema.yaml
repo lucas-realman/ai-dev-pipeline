@@ -1,0 +1,19 @@
+# ============================================================
+# 测试用 Schema 错误配置 — config_bad_schema.yaml
+# 字段类型或值范围错误, 应触发 ConfigSchemaError
+# ============================================================
+
+orchestrator:
+  mode: sprint
+  current_sprint: 1
+
+llm:
+  openai_api_base: ""
+  openai_api_key: ""
+  model: ""
+
+task:
+  max_retries: -1
+  single_task_timeout: -100
+
+machines: "not_a_list"

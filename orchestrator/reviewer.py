@@ -25,6 +25,10 @@ log = logging.getLogger("orchestrator.reviewer")
 class AutoReviewer:
     """三层自动代码 Review"""
 
+    # ALG-032: LLM 指数退避重试参数 (BUG-1 修复)
+    _LLM_MAX_RETRIES: int = 3
+    _LLM_BACKOFF_BASE: float = 2.0
+
     def __init__(self, config: Config):
         self.config = config
         self.repo_root = config.repo_root

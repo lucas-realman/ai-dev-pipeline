@@ -1,0 +1,57 @@
+[
+  {
+    "task_id": "S1_T1",
+    "description": "实现用户认证模块 — 包含 JWT 签发和验证",
+    "module_name": "auth",
+    "tags": ["python", "web", "gpu"],
+    "target_dir": "src/auth",
+    "acceptance": ["curl /api/login 返回 JWT", "pytest tests/test_auth.py 通过"],
+    "depends_on": [],
+    "estimated_minutes": 30,
+    "context_files": ["contracts/api.yaml"]
+  },
+  {
+    "task_id": "S1_T2",
+    "description": "实现数据库模型层 — User/Role ORM 定义",
+    "module_name": "models",
+    "tags": ["python", "data"],
+    "target_dir": "src/models",
+    "acceptance": ["alembic upgrade head 成功", "pytest tests/test_models.py 通过"],
+    "depends_on": [],
+    "estimated_minutes": 20,
+    "context_files": []
+  },
+  {
+    "task_id": "S1_T3",
+    "description": "实现 REST API 端点 — CRUD 用户管理",
+    "module_name": "api",
+    "tags": ["python", "web", "frontend"],
+    "target_dir": "src/api",
+    "acceptance": ["curl /api/users 返回 JSON", "pytest tests/test_api.py 通过"],
+    "depends_on": ["S1_T1", "S1_T2"],
+    "estimated_minutes": 45,
+    "context_files": ["contracts/api.yaml"]
+  },
+  {
+    "task_id": "S1_T4",
+    "description": "部署脚本 — Docker Compose 配置",
+    "module_name": "deploy",
+    "tags": ["deploy", "docker"],
+    "target_dir": "deploy",
+    "acceptance": ["docker-compose up 成功", "curl localhost:8000/health 返回 ok"],
+    "depends_on": ["S1_T3"],
+    "estimated_minutes": 25,
+    "context_files": []
+  },
+  {
+    "task_id": "S1_T5",
+    "description": "集成测试 — 全链路端到端验证",
+    "module_name": "e2e",
+    "tags": ["python", "testing"],
+    "target_dir": "tests/e2e",
+    "acceptance": ["pytest tests/e2e/ 全部通过"],
+    "depends_on": ["S1_T3"],
+    "estimated_minutes": 30,
+    "context_files": []
+  }
+]

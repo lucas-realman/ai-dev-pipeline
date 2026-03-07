@@ -1,7 +1,7 @@
 # USER-001 — 用户手册
 
 > **文档编号**: USER-001  
-> **版本**: v1.1  
+> **版本**: v1.2  
 > **状态**: 正式  
 > **更新日期**: 2026-03-07  
 > **适用对象**: 项目负责人、交付负责人、运维负责人、独立开发者
@@ -77,6 +77,12 @@ AutoDev Pipeline 是一套自动化开发流水线平台。
 ```
 
 然后，你让 AutoDev Pipeline 去处理这个 `crm-system` 项目。
+
+补充说明：
+
+- 如果你只想“跑开发流程”，执行 `autodev` 或 `python -m orchestrator.main`
+- 如果你还想“边跑边看状态”，可以加 `--serve-dashboard` 启动本地联动 Dashboard（默认 `9500` 端口）
+- 如果你只是想单独看 Dashboard 服务，也可以用 Docker 在 `8080` 端口启动独立模式
 
 ---
 
@@ -254,9 +260,10 @@ python -m orchestrator.main \
 
 例如：
 
-- 看状态：`curl http://localhost:8080/api/status`
-- 看机器：`curl http://localhost:8080/api/machines`
-- 看任务：`curl http://localhost:8080/api/tasks`
+- 本地联动模式看状态：`curl http://127.0.0.1:9500/api/status`
+- Docker 独立模式看状态：`curl http://localhost:8080/api/status`
+- 看机器：`curl http://127.0.0.1:9500/api/machines`
+- 看任务：`curl http://127.0.0.1:9500/api/tasks`
 
 一个典型的状态返回可能像这样：
 
@@ -358,6 +365,8 @@ pytest -m "smoke or component or integration or acceptance" --cov=orchestrator
 
 1. `curl http://localhost:8080/api/status`
 2. `reports/sprint_report_*.md`
+
+如果你使用的是本地联动模式，请把第 1 步改成：`curl http://127.0.0.1:9500/api/status`
 
 ### 6.3 日志
 

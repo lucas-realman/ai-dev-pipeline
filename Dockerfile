@@ -52,8 +52,8 @@ USER autodev
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
     CMD python -c "import httpx; r = httpx.get('http://localhost:8080/api/status'); assert r.status_code == 200" || exit 1
 
-# Dashboard API 端口
+# 独立 Dashboard API 端口
 EXPOSE 8080
 
-# 默认入口: 启动 Dashboard API
+# 默认入口: 启动独立 Dashboard API（不直接运行 Orchestrator 主流程）
 CMD ["python", "-m", "uvicorn", "orchestrator.dashboard:app", "--host", "0.0.0.0", "--port", "8080"]

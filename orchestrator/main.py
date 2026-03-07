@@ -5,12 +5,16 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import contextlib
 import logging
 import signal
 import time
 from typing import Dict, List, Optional
 
+import uvicorn
+
 from .config import Config
+from .dashboard import app as dashboard_app, register_orchestrator
 from .dispatcher import Dispatcher
 from .doc_analyzer import DocAnalyzer
 from .doc_parser import DocParser
@@ -30,7 +34,13 @@ MAX_ROUNDS = 20  # 主循环最大轮次
 class Orchestrator:
     """自动化开发流水线 — 主编排器 (DD-MOD-013)"""
 
-    def __init__(self, config: Config):
+    def __init__(
+        self,
+        config: Config,
+        *,
+        serve_dashboard: bool = False,
+        dashboard_host: str = "127.0.0.1",
+    ):
         self.config = config
         self.registry = MachineRegistry()
         self.registry.load_from_config(config.get_machines_list())
@@ -42,6 +52,46 @@ class Orchestrator:
         self.reporter = Reporter(config)
         self.git_ops = GitOps(config)
         self._shutdown = False
+        self._serve_dashboard = serve_dashboard
+        self._dashboard_host = dashboard_host
+        self._dashboard_server: Optional[uvicorn.Server] = None
+        self._dashboard_task: Optional[asyncio.Task] = None
+
+        # 将编排器实例注入 Dashboard，供同进程监控使用
+        register_orchestrator(self)
+
+    async def _start_dashboard_server(self) -> None:
+        """按需启动嵌入式 Dashboard API。"""
+        if not self._serve_dashboard or self._dashboard_task is not None:
+            return
+
+        server_config = uvicorn.Config(
+            dashboard_app,
+            host=self._dashboard_host,
+            port=self.config.port,
+            log_level="info",
+            access_log=False,
+        )
+        self._dashboard_server = uvicorn.Server(server_config)
+        self._dashboard_task = asyncio.create_task(self._dashboard_server.serve())
+        await asyncio.sleep(0.05)
+        log.info(
+            "Dashboard 已启动: http://%s:%s/api/status",
+            self._dashboard_host,
+            self.config.port,
+        )
+
+    async def _stop_dashboard_server(self) -> None:
+        """关闭嵌入式 Dashboard API。"""
+        if self._dashboard_server is None or self._dashboard_task is None:
+            return
+
+        self._dashboard_server.should_exit = True
+        with contextlib.suppress(asyncio.TimeoutError, RuntimeError):
+            await asyncio.wait_for(self._dashboard_task, timeout=5)
+
+        self._dashboard_server = None
+        self._dashboard_task = None
 
     # ── 信号处理 (ALG-030a) ──
 
@@ -74,62 +124,70 @@ class Orchestrator:
         如果没有传入 tasks, 则从文档集自动分解
         """
         self._setup_signal_handlers()
-        log.info("========== Sprint %s 开始 ==========", sprint_id)
+        await self._start_dashboard_server()
+        log.info("========== Sprint %s 开始 ==========" , sprint_id)
 
-        if tasks is None:
-            tasks = await self._discover_tasks()
+        try:
+            if tasks is None:
+                tasks = await self._discover_tasks()
 
-        if not tasks:
-            log.warning("没有找到任何任务, 退出")
-            return {"total": 0, "passed": 0, "failed": 0, "escalated": 0}
+            if not tasks:
+                log.warning("没有找到任何任务, 退出")
+                return {"total": 0, "passed": 0, "failed": 0, "escalated": 0}
 
-        # 注册任务到引擎
-        for t in tasks:
-            self.engine.add_task(t)
+            # 注册任务到引擎
+            for t in tasks:
+                self.engine.add_task(t)
 
-        await self.reporter.notify_sprint_start(sprint_id, tasks)
+            await self.reporter.notify_sprint_start(sprint_id, tasks)
 
-        # 同步代码到各节点
-        if self.config.get("git.sync_before_sprint", True):
-            await self._sync_code()
+            # 同步代码到各节点
+            if self.config.get("git.sync_before_sprint", True):
+                await self._sync_code()
 
-        # 主循环
-        await self._main_loop(tasks)
+            # 主循环
+            await self._main_loop(tasks)
 
-        # 收尾
-        summary = self._compute_summary(tasks)
-        self.reporter.generate_report(sprint_id, tasks, summary)
-        await self.reporter.notify_sprint_done(sprint_id, tasks)
+            # 收尾
+            summary = self._compute_summary(tasks)
+            self.reporter.generate_report(sprint_id, tasks, summary)
+            await self.reporter.notify_sprint_done(sprint_id, tasks)
 
-        # Git commit + tag
-        if self.config.get("git.auto_commit", True):
-            if await self.git_ops.has_changes():
-                await self.git_ops.commit(f"sprint({sprint_id}): auto-commit by orchestrator")
-                await self.git_ops.push()
-            await self.git_ops.tag_sprint(f"sprint-{sprint_id}")
+            # Git commit + tag
+            if self.config.get("git.auto_commit", True):
+                if await self.git_ops.has_changes():
+                    await self.git_ops.commit(f"sprint({sprint_id}): auto-commit by orchestrator")
+                    await self.git_ops.push()
+                await self.git_ops.tag_sprint(f"sprint-{sprint_id}")
 
-        log.info("========== Sprint %s 完成: %s ==========", sprint_id, summary)
-        return summary
+            log.info("========== Sprint %s 完成: %s ==========" , sprint_id, summary)
+            return summary
+        finally:
+            await self._stop_dashboard_server()
 
     async def run_continuous(self) -> None:
         """持续模式: 循环执行 sprint (用于 CI 或长期运行)"""
         sprint_no = 1
-        while True:
-            sprint_id = f"auto-{sprint_no:03d}"
-            try:
-                summary = await self.run_sprint(sprint_id)
-                if summary["total"] == 0:
-                    log.info("无更多任务, 退出持续模式")
+        await self._start_dashboard_server()
+        try:
+            while True:
+                sprint_id = f"auto-{sprint_no:03d}"
+                try:
+                    summary = await self.run_sprint(sprint_id)
+                    if summary["total"] == 0:
+                        log.info("无更多任务, 退出持续模式")
+                        break
+                    sprint_no += 1
+                    await asyncio.sleep(5)
+                except KeyboardInterrupt:
+                    log.info("收到中断信号, 退出")
                     break
-                sprint_no += 1
-                await asyncio.sleep(5)
-            except KeyboardInterrupt:
-                log.info("收到中断信号, 退出")
-                break
-            except Exception as e:
-                log.exception("Sprint %s 异常: %s", sprint_id, e)
-                await self.reporter.notify_error(f"Sprint {sprint_id} 异常: {e}")
-                break
+                except Exception as e:
+                    log.exception("Sprint %s 异常: %s", sprint_id, e)
+                    await self.reporter.notify_error(f"Sprint {sprint_id} 异常: {e}")
+                    break
+        finally:
+            await self._stop_dashboard_server()
 
     # ── 任务发现 ──
 
@@ -331,6 +389,16 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="启用 debug 日志",
     )
+    p.add_argument(
+        "--serve-dashboard",
+        action="store_true",
+        help="在同进程启动 Dashboard API (端口取 orchestrator.port, 默认 9500)",
+    )
+    p.add_argument(
+        "--dashboard-host",
+        default="127.0.0.1",
+        help="嵌入式 Dashboard 监听地址 (default: 127.0.0.1)",
+    )
     return p
 
 
@@ -352,7 +420,11 @@ def main() -> None:
     config = Config(config_path, project_root=project_root)
 
     # 构建编排器
-    orch = Orchestrator(config)
+    orch = Orchestrator(
+        config,
+        serve_dashboard=args.serve_dashboard,
+        dashboard_host=args.dashboard_host,
+    )
 
     # 干跑模式
     if args.dry_run:

@@ -38,6 +38,9 @@ python -m orchestrator.main --config orchestrator/config.yaml --dry-run
 
 # 6. 运行单轮 Sprint
 python -m orchestrator.main --config orchestrator/config.yaml --mode sprint --sprint-id sprint-001
+
+# 7. 如需本地联动 Dashboard，一并启动监控 API（默认 9500 端口）
+python -m orchestrator.main --config orchestrator/config.yaml --mode sprint --sprint-id sprint-001 --serve-dashboard
 ```
 
 ## 如何使用这套自动化开发流水线
@@ -94,7 +97,7 @@ pytest --cov=orchestrator --cov-report=term-missing
 # 构建镜像
 docker build -t ai-dev-pipeline:latest .
 
-# 使用 docker-compose 启动
+# 使用 docker-compose 启动独立 Dashboard 服务（8080）
 docker compose up -d
 
 # 健康检查
@@ -106,14 +109,19 @@ docker compose run --rm test
 
 ## Dashboard API
 
-启动后可通过以下端点监控运行状态：
+支持两种模式：
+
+- **本地联动模式**：执行 `python -m orchestrator.main ... --serve-dashboard`，Dashboard 与编排器同进程运行，默认端口为 `orchestrator.port`（默认 `9500`）
+- **Docker 独立模式**：执行 `docker compose up -d`，启动独立 Dashboard 服务，端口为 `8080`，未绑定编排器时返回基础健康状态与空摘要
+
+可通过以下端点监控运行状态：
 
 | 端点 | 方法 | 说明 |
 |------|------|------|
 | `/api/status` | GET | 任务状态汇总 (queued / in_progress / passed / failed) |
 | `/api/machines` | GET | 机器池状态 (online / busy / offline) |
 | `/api/tasks` | GET | 所有任务详情列表 |
-| `/api/health` | GET | 健康检查 (返回 `{"status": "ok"}`) |
+| `/api/health` | GET | 健康检查 (返回 `{"status": "healthy", "version": "3.0.0"}`) |
 
 ## CI/CD Pipeline
 

@@ -1,7 +1,7 @@
 # OPS-002 — 部署手册 (Deployment Guide)
 
 > **文档编号**: OPS-002  
-> **版本**: v1.1  
+> **版本**: v1.2  
 > **状态**: 正式  
 > **更新日期**: 2026-03-07  
 > **关联文档**: [OPS-001-运维手册-Runbook.md](OPS-001-运维手册-Runbook.md) · [USER-001-用户手册.md](USER-001-用户手册.md) · [../../README.md](../../README.md)
@@ -16,6 +16,10 @@
 
 1. **编排能力**：通过 `autodev` CLI 启动单轮或持续运行的 Sprint。
 2. **观测能力**：通过 Dashboard API 查看系统状态、机器状态和任务状态。
+
+> 说明：Dashboard 当前支持两种运行形态：
+> - **本地联动模式**：由 `autodev --serve-dashboard` 在编排进程内启动，默认端口为 `9500`
+> - **Docker 独立模式**：由 `docker compose up -d orchestrator` 启动，端口为 `8080`
 
 ---
 
@@ -199,6 +203,8 @@ docker build -t ai-dev-pipeline:3.0.0 .
 docker compose up -d orchestrator
 ```
 
+这里启动的是**独立 Dashboard 服务**，用于健康检查和状态查看；如果没有与真实编排进程联动，`/api/status` 会返回空摘要。
+
 ### 5.3 运行容器内测试
 
 ```bash
@@ -215,21 +221,34 @@ curl http://localhost:8080/api/status
 预期结果示例：
 
 ```json
-{"status":"ok"}
+{"status":"healthy","version":"3.0.0"}
 ```
 
 以及：
 
 ```json
 {
-  "queued": 0,
-  "in_progress": 0,
-  "passed": 0,
-  "failed": 0
+  "version": "3.0.0",
+  "status": "running",
+  "machines": {"total": 0, "online": 0, "busy": 0, "offline": 0},
+  "tasks": {"total": 0, "queued": 0, "in_progress": 0, "passed": 0, "failed": 0, "escalated": 0}
 }
 ```
 
 如果 `/api/health` 通了，而 `/api/status` 也能返回 JSON，说明 Dashboard 这部分部署是正常的。
+
+如果你希望在本地看到**真实任务状态**而不是空摘要，请使用本地联动模式：
+
+```bash
+python -m orchestrator.main \
+  --config orchestrator/config.yaml \
+  --project-path /Users/you/workspace/crm-system \
+  --sprint-id sprint-001 \
+  --mode sprint \
+  --serve-dashboard
+```
+
+此时 Dashboard 默认监听 `127.0.0.1:9500`，也可通过 `--dashboard-host` 与配置中的 `orchestrator.port` 调整。
 
 ---
 
@@ -310,6 +329,17 @@ python -m orchestrator.main \
   --mode sprint
 ```
 
+如果希望同时暴露本地联动 Dashboard：
+
+```bash
+python -m orchestrator.main \
+  --config orchestrator/config.yaml \
+  --project-path /Users/you/workspace/crm-system \
+  --sprint-id sprint-001 \
+  --mode sprint \
+  --serve-dashboard
+```
+
 典型执行过程可以理解为：
 
 1. 加载 `crm-system/docs/` 文档；
@@ -340,7 +370,7 @@ python -m orchestrator.main \
 例如正式运行后，你可以这样检查：
 
 ```bash
-curl http://localhost:8080/api/status
+curl http://127.0.0.1:9500/api/status
 ls -la reports/
 tail -f logs/orchestrator.log
 ```
@@ -366,7 +396,7 @@ tail -f logs/orchestrator.log
 2. `pytest -m smoke -q`
 3. `python -m orchestrator.main --dry-run`
 4. `curl http://localhost:8080/api/health`
-5. `python -m orchestrator.main --mode sprint`
+5. `python -m orchestrator.main --mode sprint --serve-dashboard`
 6. 检查 `reports/` 是否生成报告
 
 ---

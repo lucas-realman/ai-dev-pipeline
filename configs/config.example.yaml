@@ -8,7 +8,7 @@ orchestrator:
   current_sprint: 1
   poll_interval: 10
   max_concurrent: 4
-  port: 9500
+  port: 9500   # 本地嵌入式 Dashboard 默认端口（--serve-dashboard 时使用）
 
 project:
   name: your-project
@@ -37,7 +37,7 @@ machines:
     display_name: "Orchestrator"
     host: 127.0.0.1
     port: 22
-    user: $USER
+    user: ${USER}
     work_dir: /absolute/path/to/your-project
     tags: [python, orchestrator, testing]
     aider_prefix: 'export PATH="$HOME/.local/bin:$PATH"'

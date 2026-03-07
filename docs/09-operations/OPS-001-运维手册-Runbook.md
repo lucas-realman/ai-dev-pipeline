@@ -1,7 +1,7 @@
 # OPS-001 — 运维手册 (Runbook)
 
 > **文档编号**: OPS-001  
-> **版本**: v2.0  
+> **版本**: v2.1  
 > **状态**: 正式  
 > **创建日期**: 2026-03-07  
 > **v2.0 变更**: Sprint 3 — 新增 Docker 部署 / Dashboard API / CI 四层流水线  
@@ -39,7 +39,8 @@ AutoDev Pipeline 是一个 AI 驱动的自动化编码流水线，通过 LLM 分
 
 | 服务 | 端口 | 协议 | 说明 |
 |------|------|------|------|
-| Dashboard API | 8080 | HTTP | 系统状态 `/api/status`, 健康检查 `/api/health` |
+| Dashboard API（本地联动） | 9500 | HTTP | `autodev --serve-dashboard` 启动，返回真实编排状态 |
+| Dashboard API（Docker 独立） | 8080 | HTTP | `docker compose up -d` 启动，返回独立 Dashboard 状态 |
 | SSH (Worker) | 22 | TCP | Orchestrator → Worker 机器 |
 | LLM API | 443 | HTTPS | 文档分解 + 代码审查 |
 | Prometheus Metrics | 9090 | HTTP | 监控指标暴露 (可选) |
@@ -54,13 +55,16 @@ AutoDev Pipeline 是一个 AI 驱动的自动化编码流水线，通过 LLM 分
 
 ```bash
 # 标准启动
-autodev sprint --sprint 1 --config ./config.yaml
+autodev --config ./config.yaml --sprint-id sprint-001 --mode sprint
 
 # 预览模式 (不执行, 仅查看任务分解)
-autodev dry-run --sprint 1 --config ./config.yaml
+autodev --config ./config.yaml --sprint-id sprint-001 --dry-run
+
+# 启动单轮 Sprint 并联动 Dashboard（默认 9500 端口）
+autodev --config ./config.yaml --sprint-id sprint-001 --mode sprint --serve-dashboard
 
 # 后台运行 (systemd 或 nohup)
-nohup autodev sprint --sprint 1 > /dev/null 2>&1 &
+nohup autodev --config ./config.yaml --sprint-id sprint-001 --mode sprint > /dev/null 2>&1 &
 ```
 
 ### 2.2 停止 Sprint
@@ -98,10 +102,10 @@ cat reports/sprint_report_*.md
 vim config.yaml
 
 # 2. 验证配置 (dry-run 模式)
-autodev dry-run --config ./config.yaml
+autodev --config ./config.yaml --dry-run
 
 # 3. 重启服务
-kill -SIGTERM <pid> && sleep 5 && autodev sprint --sprint N --config ./config.yaml
+kill -SIGTERM <pid> && sleep 5 && autodev --config ./config.yaml --sprint-id sprint-002 --mode sprint
 ```
 
 ---
@@ -172,7 +176,7 @@ kill -SIGTERM <pid> && sleep 5 && autodev sprint --sprint N --config ./config.ya
 **症状**: Orchestrator 进程意外退出
 
 **处理**:
-1. 重新启动即可: `autodev sprint --sprint N`
+1. 重新启动即可: `autodev --config ./config.yaml --sprint-id sprint-001 --mode sprint`
 2. 系统自动从 `_snapshot.json` 恢复状态
 3. 已 DISPATCHED 但未返回的任务会被标记为 RETRY
 4. ⚠️ 远程可能已产出代码但未 push — 手动检查: `ssh dev@W1 'cd project && git status'`
@@ -227,7 +231,7 @@ cp backup/config.yaml ./config.yaml
 cp -r backup/contracts/ ./contracts/
 
 # 3. 重新启动 (快照自动恢复)
-autodev sprint --sprint N
+autodev --config ./config.yaml --sprint-id sprint-001 --mode sprint
 ```
 
 ---
@@ -245,7 +249,7 @@ docker build -t autodev-pipeline:latest .
 ### 6.2 使用 docker-compose 启动
 
 ```bash
-# 启动 Dashboard API (端口 8080)
+# 启动独立 Dashboard API (端口 8080)
 docker compose up -d orchestrator
 
 # 运行测试 (覆盖率 ≥85%)
@@ -268,6 +272,13 @@ curl http://localhost:8080/api/machines
 curl http://localhost:8080/api/tasks
 ```
 
+### 6.4 Dashboard 运行模式说明
+
+- **本地联动模式**：执行 `autodev --serve-dashboard`，Dashboard 与编排器同进程运行，默认监听 `9500`
+- **Docker 独立模式**：执行 `docker compose up -d orchestrator`，仅启动独立 Dashboard 服务，监听 `8080`
+
+独立模式下，如果没有显式绑定编排器实例，`/api/status` 会返回基础状态与空摘要；联动模式下会返回真实任务与机器状态。
+
 ### 6.4 CI/CD 四层流水线
 
 ```
@@ -288,3 +299,4 @@ L1 (smoke) → L2 (component, --cov) → L3 (integration, --cov≥80) → L4 (ac
 |------|------|---------|
 | v1.0 | 2026-03-07 | 初版: 日常操作、故障排查、监控告警、备份恢复 |
 | v2.0 | 2026-03-21 | Sprint 3: Docker 部署, Dashboard API, CI 四层流水线, 日志标准化 |
+| v2.1 | 2026-03-07 | 修正 CLI 示例，补充 Dashboard 联动/独立两种运行模式说明 |

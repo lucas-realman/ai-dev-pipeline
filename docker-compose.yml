@@ -6,7 +6,7 @@
 version: "3.9"
 
 services:
-  # ── 主服务: Dashboard API ──────────────────────
+  # ── 主服务: 独立 Dashboard API ──────────────────
   orchestrator:
     build:
       context: .

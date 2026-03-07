@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from orchestrator.main import MAX_ROUNDS, Orchestrator, build_parser
+from orchestrator.dashboard import _state, app as dashboard_app
 from orchestrator.task_models import CodingTask, TaskStatus
 
 
@@ -64,12 +65,16 @@ def test_build_parser_custom_args():
         "--sprint-id", "S1",
         "--mode", "continuous",
         "--dry-run",
+        "--serve-dashboard",
+        "--dashboard-host", "0.0.0.0",
         "-v",
     ])
     assert args.config == "custom.yaml"
     assert args.sprint_id == "S1"
     assert args.mode == "continuous"
     assert args.dry_run is True
+    assert args.serve_dashboard is True
+    assert args.dashboard_host == "0.0.0.0"
     assert args.verbose is True
 
 
@@ -93,6 +98,50 @@ def test_orchestrator_init(tmp_path):
 
     assert orch.config is cfg
     assert orch._shutdown is False
+    assert _state["orchestrator"] is orch
+
+
+@pytest.mark.component
+@pytest.mark.asyncio
+async def test_orchestrator_dashboard_status_injection(tmp_path):
+    """Orchestrator 初始化后，Dashboard 可读取真实注入的 registry/engine 状态。"""
+    from httpx import ASGITransport, AsyncClient
+    from orchestrator.task_models import MachineInfo
+
+    cfg = _make_config(tmp_path)
+
+    with patch("orchestrator.main.MachineRegistry") as MockReg, \
+         patch("orchestrator.main.TaskEngine") as MockEngine, \
+         patch("orchestrator.main.Dispatcher"), \
+         patch("orchestrator.main.AutoReviewer"), \
+         patch("orchestrator.main.TestRunner"), \
+         patch("orchestrator.main.Reporter"), \
+         patch("orchestrator.main.GitOps"):
+
+        mock_reg = MockReg.return_value
+        mock_reg.load_from_config = MagicMock()
+
+        machine = MachineInfo(machine_id="m1", host="127.0.0.1", user="dev", tags=["python"])
+        mock_reg.get_all_machines.return_value = [machine]
+
+        task = _make_task("T900")
+        task.status = TaskStatus.QUEUED
+        MockEngine.return_value._tasks = {"T900": (task, MagicMock())}
+
+        old = _state.get("orchestrator")
+        try:
+            Orchestrator(cfg)
+            transport = ASGITransport(app=dashboard_app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                resp = await client.get("/api/status")
+
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["machines"]["total"] == 1
+            assert data["tasks"]["total"] == 1
+            assert data["tasks"]["queued"] == 1
+        finally:
+            _state["orchestrator"] = old
 
 
 # ── TC: _compute_summary ─────────────────────────────────

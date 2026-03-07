@@ -1,8 +1,9 @@
 # ITER-001 — 迭代计划
 
 > **文档编号**: ITER-001  
-> **版本**: v1.0  
-> **更新日期**: 2026-03-06  
+> **版本**: v2.0  
+> **更新日期**: 2026-03-21  
+> **v2.0 变更**: Sprint 3 状态更新 — 标记 Sprint 0~3 Backlog 状态  
 > **上游**: [REQ-001](../01-requirements/REQ-001-系统需求规格说明书.md) · [ARCH-002](../03-architecture/ARCH-002-部署架构.md)
 
 ---
@@ -39,48 +40,56 @@
 
 > 每 Sprint ≥ 5 条 Backlog Item，映射到 FR/MOD。优先级: H=高 M=中 L=低
 
-### Sprint 0 — 项目骨架 (M0)
+### Sprint 0 — 项目骨架 (M0) ✅ Done
 
-| # | Backlog Item | 关联 FR/MOD | 优先级 | 预估 |
+| # | Backlog Item | 关联 FR/MOD | 优先级 | 状态 |
 |---|-------------|------------|--------|------|
-| S0-01 | 初始化 pyproject.toml + CLI 入口 `autodev` | MOD-001 (main) | H | 0.5d |
-| S0-02 | 配置加载框架 config.yaml + MOD-002 | MOD-002 (config), FR-019 | H | 0.5d |
-| S0-03 | 13 模块占位文件 + `__init__.py` 导入验证 | MOD-001~013 | H | 0.5d |
-| S0-04 | 冒烟测试 TC-001~005 编写 + CI pipeline | TC-001~005, NFR-008 | H | 1d |
-| S0-05 | docs/ 文档体系骨架 (10 个目录 + 模板) | — | M | 1d |
-| S0-06 | Git 仓库规范: .gitignore, pre-commit hooks | CON-009 | L | 0.5d |
+| S0-01 | 初始化 pyproject.toml + CLI 入口 `autodev` | MOD-001 (main) | H | ✅ Done |
+| S0-02 | 配置加载框架 config.yaml + MOD-002 | MOD-002 (config), FR-019 | H | ✅ Done |
+| S0-03 | 13 模块占位文件 + `__init__.py` 导入验证 | MOD-001~013 | H | ✅ Done |
+| S0-04 | 冒烟测试 TC-001~005 编写 + CI pipeline | TC-001~005, NFR-008 | H | ✅ Done |
+| S0-05 | docs/ 文档体系骨架 (10 个目录 + 模板) | — | M | ✅ Done |
+| S0-06 | Git 仓库规范: .gitignore, pre-commit hooks | CON-009 | L | ✅ Done |
 
-### Sprint 1 — 单机端到端 (M1)
+### Sprint 1 — 单机端到端 (M1) ✅ Done
 
-| # | Backlog Item | 关联 FR/MOD | 优先级 | 预估 |
+| # | Backlog Item | 关联 FR/MOD | 优先级 | 状态 |
 |---|-------------|------------|--------|------|
-| S1-01 | MOD-005 doc_analyzer: 需求文档解析→任务列表 | FR-002, FR-003, IF-001 | H | 2d |
-| S1-02 | MOD-004 task_engine: 任务编排 + 依赖排序 | FR-004, FR-005, IF-003 | H | 2d |
-| S1-03 | MOD-006 dispatcher: 本地模式单任务分发 | FR-006, IF-005 | H | 1.5d |
-| S1-04 | MOD-007 reviewer: 代码审查 (mock LLM) | FR-008, IF-006 | H | 1.5d |
-| S1-05 | MOD-009 state_machine: 11 状态流转引擎 | FR-014, FR-015, IF-009 | M | 1.5d |
-| S1-06 | 端到端集成: doc→task→dispatch→review 链路 | TC-110 | H | 1.5d |
+| S1-01 | MOD-005 doc_analyzer: 需求文档解析→任务列表 | FR-002, FR-003, IF-001 | H | ✅ Done |
+| S1-02 | MOD-004 task_engine: 任务编排 + 依赖排序 | FR-004, FR-005, IF-003 | H | ✅ Done |
+| S1-03 | MOD-006 dispatcher: 本地模式单任务分发 | FR-006, IF-005 | H | ✅ Done |
+| S1-04 | MOD-007 reviewer: 代码审查 (mock LLM) | FR-008, IF-006 | H | ✅ Done |
+| S1-05 | MOD-009 state_machine: 11 状态流转引擎 | FR-014, FR-015, IF-009 | M | ✅ Done |
+| S1-06 | 端到端集成: doc→task→dispatch→review 链路 | TC-110 | H | ✅ Done |
 
-### Sprint 2 — 多机分发 (M2)
+> **交付**: 127 tests, 73% coverage, tag `testing-v1.0`
 
-| # | Backlog Item | 关联 FR/MOD | 优先级 | 预估 |
+### Sprint 2 — 多机分发 (M2) ✅ Done
+
+| # | Backlog Item | 关联 FR/MOD | 优先级 | 状态 |
 |---|-------------|------------|--------|------|
-| S2-01 | MOD-003 machine_registry: 机器注册 + 状态查询 | FR-009, FR-010, IF-004 | H | 1.5d |
-| S2-02 | MOD-006 dispatcher: SSH 远程分发 + 并行调度 | FR-006, FR-007, FR-011, IF-005 | H | 2d |
-| S2-03 | MOD-008 test_runner: 远程测试执行 + 结果回收 | FR-012, FR-013, IF-007 | H | 2d |
-| S2-04 | MOD-013 health_check: 心跳检测 + 故障标记 | NFR-003, ARCH-001 §5 | M | 1.5d |
-| S2-05 | 多机集成: 5 台机器并行 Sprint + TC-060~063 | TC-060~063, TC-102 | H | 2d |
+| S2-01 | MOD-003 machine_registry: 机器注册 + 状态查询 | FR-009, FR-010, IF-004 | H | ✅ Done |
+| S2-02 | MOD-006 dispatcher: SSH 远程分发 + 并行调度 | FR-006, FR-007, FR-011, IF-005 | H | ✅ Done |
+| S2-03 | MOD-008 test_runner: 远程测试执行 + 结果回收 | FR-012, FR-013, IF-007 | H | ✅ Done |
+| S2-04 | MOD-013 health_check: 心跳检测 + 故障标记 | NFR-003, ARCH-001 §5 | M | ✅ Done |
+| S2-05 | 多机集成: 5 台机器并行 Sprint + TC-060~063 | TC-060~063, TC-102 | H | ✅ Done |
 
-### Sprint 3 — 生产就绪 (M3)
+> **交付**: 42 integration tests, 169 total, 80% coverage, tag `testing-v2.0`
 
-| # | Backlog Item | 关联 FR/MOD | 优先级 | 预估 |
+### Sprint 3 — 生产就绪 (M3) ✅ Done
+
+| # | Backlog Item | 关联 FR/MOD | 优先级 | 状态 |
 |---|-------------|------------|--------|------|
-| S3-01 | MOD-010 reporter: 报告生成 (Markdown + 钉钉) | FR-016, FR-017, IF-010 | H | 1.5d |
-| S3-02 | MOD-011 git_ops: Git 操作封装 (commit/push/branch) | FR-018, IF-011 | H | 1d |
-| S3-03 | MOD-012 config: 多环境配置 + 热加载 | FR-019, FR-020, IF-012 | M | 1d |
-| S3-04 | 重试与升级: state_machine RETRY/ESCALATED 路径 | FR-015, FR-021 | H | 1.5d |
-| S3-05 | MOD-014 persistence: SQLite 状态持久化 (ADR-007) | SYS-009, ADR-007 | H | 2d |
-| S3-06 | L3 集成测试全量执行 | TC-110~123 | H | 2d |
+| S3-01 | CI/CD 增强: L4 验收 + 覆盖率报告 | NFR-008 | H | ✅ Done |
+| S3-02 | Dockerfile 多阶段构建 | ARCH-002 | H | ✅ Done |
+| S3-03 | docker-compose.yml 编排 | ARCH-002 | H | ✅ Done |
+| S3-04 | Dashboard API (`/api/status`, `/api/health`) | DD-MOD-014, NFR-015 | H | ✅ Done |
+| S3-05 | 性能基线验证 (TC-124) | NFR-001 | M | ✅ Done |
+| S3-06 | 日志标准化 (JSON + Standard) | NFR-013 | M | ✅ Done |
+| S3-07~S3-13 | L4 验收测试 TC-121~TC-127 (13 tests) | TC-121~127 | H | ✅ Done |
+| S3-14~S3-18 | 文档更新 (OPS, TEST, ITER, README) | TRACE-001 | M | ✅ Done |
+
+> **交付**: 281 tests (L1 36, L2 174, L3 42, L4 29), 85% coverage, tag `v3.0.0-rc1`
 
 ### Sprint 4 — 全链路验收 (M3 验收)
 
@@ -179,3 +188,4 @@ gantt
 |------|------|---------|------|
 | v1.0 | 2026-03-06 | 初始版本 | AutoDev Pipeline |
 | v1.1 | 2026-03-06 | 新增: §4 Sprint Backlog (5 Sprint, 28 items), §5 DoD, §6 关键路径图 (A-007) | AutoDev Pipeline |
+| v2.0 | 2026-03-21 | Sprint 3 完成: 标记 S0~S3 Backlog Done, 更新 S3 实际交付物 (281 tests, 85% cov) | AutoDev Pipeline |

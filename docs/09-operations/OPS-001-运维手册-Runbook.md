@@ -1,9 +1,10 @@
 # OPS-001 — 运维手册 (Runbook)
 
 > **文档编号**: OPS-001  
-> **版本**: v1.0  
+> **版本**: v2.0  
 > **状态**: 正式  
 > **创建日期**: 2026-03-07  
+> **v2.0 变更**: Sprint 3 — 新增 Docker 部署 / Dashboard API / CI 四层流水线  
 > **上游文档**: [DD-SYS-001](../05-detail-design/DD-SYS-001-系统详细设计.md) · [DD-MOD-013](../05-detail-design/DD-MOD-013-main.md)  
 > **对应 ACTION-ITEM**: v2.0 A-013 / v1.0 A-012
 
@@ -38,6 +39,7 @@ AutoDev Pipeline 是一个 AI 驱动的自动化编码流水线，通过 LLM 分
 
 | 服务 | 端口 | 协议 | 说明 |
 |------|------|------|------|
+| Dashboard API | 8080 | HTTP | 系统状态 `/api/status`, 健康检查 `/api/health` |
 | SSH (Worker) | 22 | TCP | Orchestrator → Worker 机器 |
 | LLM API | 443 | HTTPS | 文档分解 + 代码审查 |
 | Prometheus Metrics | 9090 | HTTP | 监控指标暴露 (可选) |
@@ -230,8 +232,59 @@ autodev sprint --sprint N
 
 ---
 
-## §6 变更记录
+## §6 Docker 部署 (Sprint 3 新增)
+
+### 6.1 构建镜像
+
+```bash
+docker build -t autodev-pipeline:latest .
+```
+
+镜像采用多阶段构建 (python:3.10-slim), 运行时使用非 root 用户 `autodev`。
+
+### 6.2 使用 docker-compose 启动
+
+```bash
+# 启动 Dashboard API (端口 8080)
+docker compose up -d orchestrator
+
+# 运行测试 (覆盖率 ≥85%)
+docker compose run --rm test
+```
+
+### 6.3 健康检查
+
+```bash
+# Docker HEALTHCHECK 每 30s 自动检查
+curl http://localhost:8080/api/health
+
+# 系统状态
+curl http://localhost:8080/api/status
+
+# 机器状态
+curl http://localhost:8080/api/machines
+
+# 任务状态
+curl http://localhost:8080/api/tasks
+```
+
+### 6.4 CI/CD 四层流水线
+
+```
+L1 (smoke) → L2 (component, --cov) → L3 (integration, --cov≥80) → L4 (acceptance)
+                                                                       ↓
+                                                              coverage-report (≥85%)
+```
+
+- L1~L3: 每次推送触发
+- L4: 仅 `main` 分支 / `v*` 标签触发
+- coverage-report: 生成 HTML + JSON 覆盖率报告
+
+---
+
+## §7 变更记录
 
 | 版本 | 日期 | 变更内容 |
 |------|------|---------|
 | v1.0 | 2026-03-07 | 初版: 日常操作、故障排查、监控告警、备份恢复 |
+| v2.0 | 2026-03-21 | Sprint 3: Docker 部署, Dashboard API, CI 四层流水线, 日志标准化 |

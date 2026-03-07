@@ -1,6 +1,6 @@
 # ============================================================
 # AutoDev Pipeline — CI 流水线
-# 对齐 plan-v2 §4: 短路机制 Lint → L1 → L2 → L3
+# 对齐 plan-v2 §4: 短路机制 Lint → L1 → L2 → L3 → L4
 # ============================================================
 
 name: CI Pipeline
@@ -75,6 +75,7 @@ jobs:
             --tb=long \
             --cov=orchestrator \
             --cov-report=term-missing \
+            --cov-report=html:htmlcov \
             --cov-fail-under=70
 
       - name: Upload coverage report
@@ -105,4 +106,70 @@ jobs:
           pytest -m integration \
             --tb=long \
             --cov=orchestrator \
-            --cov-report=term-missing
+            --cov-report=term-missing \
+            --cov-fail-under=80
+
+      - name: Upload integration test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-report
+          path: .report.json
+          retention-days: 7
+
+  # ── Stage 5: L4 验收测试 (里程碑节点触发) ──────
+  test-l4:
+    name: "L4 Acceptance Tests"
+    needs: test-l3
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Run L4 acceptance tests
+        run: |
+          pytest -m acceptance \
+            --tb=long \
+            -v
+
+  # ── 全量覆盖率 (Badge 数据) ────────────────────
+  coverage-report:
+    name: "Coverage Report"
+    needs: test-l3
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Generate full coverage
+        run: |
+          pytest -m "smoke or component or integration" \
+            --cov=orchestrator \
+            --cov-report=term-missing \
+            --cov-report=html:htmlcov \
+            --cov-report=json:coverage.json \
+            --cov-fail-under=85 \
+            -q
+
+      - name: Upload full coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-full
+          path: |
+            htmlcov/
+            coverage.json
+          retention-days: 14

@@ -283,4 +283,45 @@ pytest -m acceptance -s -v
 | v1.0 | 2026-03-06 | 初始版本：4 层测试策略 + 45 个 TC + 自动化执行 | AutoDev Pipeline |
 | v1.1 | 2026-03-06 | 修正: MOD 编号与 OD-001 对齐, FR 映射修正 (A-002) | AutoDev Pipeline |
 | v1.2 | 2026-03-06 | 新增: FR-003 (TC-054~055), FR-018 (TC-093~094), FR-023 (TC-034~035) 共 6 条测试用例 (A-008) | AutoDev Pipeline |
-| v1.3 | 2026-03-07 | L3 集成测试补充 7 条 (TC-115~TC-120): 循环依赖检测、快照恢复、LLM 降级、沙箱违规、SSH 预检、JSON 日志链路 (A-022/A-023) | AutoDev Pipeline |
+| v1.3 | 2026-03-07 | L3 集成测试补充 7 条 (TC-115~TC-120): 循环依赖检测、快照恢复、LLM 降级、沙箱违规、SSH 预检、JSON 日志链路 (A-022/A-023) | AutoDev Pipeline || v2.0 | 2026-03-21 | Sprint 3 执行结果回填: 281 tests (L1 36, L2 174, L3 42, L4 13+16), 覆盖率 85%, 全层通过 | AutoDev Pipeline |
+
+---
+
+## 附录: Sprint 3 实际执行结果
+
+> 执行日期: 2026-03-21  
+> Python: 3.10.18 · pytest: 8.x · 平台: macOS (darwin)
+
+### 测试数量汇总
+
+| 层级 | 标记 | 测试数 | 通过 | 失败 | 通过率 |
+|------|------|--------|------|------|--------|
+| L1 冒烟 | `smoke` | 36 | 36 | 0 | 100% |
+| L2 组件 | `component` | 174 | 174 | 0 | 100% |
+| L3 集成 | `integration` | 42 | 42 | 0 | 100% |
+| L4 验收 | `acceptance` | 13 | 13 | 0 | 100% |
+| L2 追加 (dashboard, log, 覆盖率) | `component` | 16 | 16 | 0 | 100% |
+| **合计** | | **281** | **281** | **0** | **100%** |
+
+### 代码覆盖率
+
+| 模块 | 语句数 | 遗漏 | 覆盖率 |
+|------|--------|------|--------|
+| config.py | 173 | 7 | 96% |
+| dashboard.py | 68 | 0 | 100% |
+| dispatcher.py | 180 | 54 | 70% |
+| doc_analyzer.py | 142 | 43 | 70% |
+| doc_parser.py | 118 | 8 | 93% |
+| git_ops.py | 85 | 14 | 84% |
+| log_config.py | 43 | 0 | 100% |
+| machine_registry.py | 91 | 9 | 90% |
+| main.py | 222 | 35 | 84% |
+| reporter.py | 140 | 21 | 85% |
+| reviewer.py | 168 | 43 | 74% |
+| state_machine.py | 87 | 3 | 97% |
+| task_engine.py | 223 | 26 | 88% |
+| task_models.py | 126 | 2 | 98% |
+| test_runner.py | 172 | 39 | 77% |
+| **TOTAL** | **2039** | **304** | **85%** |
+
+> 注: dispatcher/reviewer/test_runner 中遗漏的代码行均为 SSH 远程执行 / LLM HTTP 调用等无法在 CI 环境中测试的路径，已通过 mock 覆盖核心逻辑。

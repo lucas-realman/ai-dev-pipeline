@@ -1,9 +1,9 @@
 # TRACE-001 — 全局追溯矩阵
 
 > **文档编号**: TRACE-001  
-> **版本**: v1.2  
+> **版本**: v2.0  
 > **状态**: 正式  
-> **更新日期**: 2026-03-07  
+> **更新日期**: 2026-03-21  
 > **说明**: 本文档是全系统 ID 追溯的唯一权威来源，覆盖 FR → SYS → ARCH → MOD → DD → IF → DM → TC 全链路。
 
 ---
@@ -55,6 +55,8 @@
 | MOD-011 | git_ops | FR-019,020,021 | IF-012 | DD-MOD-011 | ALG-023~024 | SEQ-011 | 3 |
 | MOD-012 | config | CON-001 | — | DD-MOD-012 | ALG-025~027 | — | 4 |
 | MOD-013 | main | — (入口编排) | — | DD-MOD-013 | ALG-028~031 | SEQ-012 | 1 |
+| MOD-014 | dashboard | NFR-015 | — | DD-MOD-014 | — | — | 4 (TC-128~131) |
+| MOD-015 | log_config | NFR-013 | — | — | — | — | 2 (TC-132~133) |
 
 ---
 
@@ -124,12 +126,12 @@
 | SYS-001 ~ SYS-009 | 系统设计 | SYS-001 映射表 |
 | ADR-001 ~ ADR-006 | 架构决策 | SYS-001 §4 |
 | ARCH-001 ~ ARCH-010 | 架构组件 | ARCH-001 映射表 |
-| MOD-001 ~ MOD-013 | 代码模块 | OD-001 映射表 |
+| MOD-001 ~ MOD-015 | 代码模块 | OD-001 映射表 |
 | DM-001 ~ DM-008 | 数据模型 | OD-002 映射表 |
 | IF-001 ~ IF-012 | 接口契约 | OD-001 §2.2 / OD-003 |
 | ALG-001 ~ ALG-033 | 算法描述 | DD-MOD-001~013 |
 | SEQ-001 ~ SEQ-012 | 序列图 | DD-MOD-001~013 |
-| TC-001 ~ TC-127 | 测试用例 | TEST-001 §2 |
+| TC-001 ~ TC-133 | 测试用例 | TEST-001 §2 |
 
 **追溯链**: FR → SYS → ARCH → MOD → DD → IF/DM → TC
 
@@ -142,3 +144,4 @@
 | v1.0 | 2026-03-06 | 初始版本：23 FR 全链路追溯 + NFR/CON 追溯 + 覆盖率统计 | AutoDev Pipeline |
 | v1.1 | 2026-03-06 | 修正: §1 正向追溯 8/13 MOD 编号与 OD-001 对齐, §2 反向追溯重建 (A-001) | AutoDev Pipeline |
 | v1.2 | 2026-03-07 | §2 扩展 DD/ALG/SEQ 列; §4 新增 DD/ALG/SEQ 覆盖; §5 新增 ALG/SEQ ID 范围 | AutoDev Pipeline |
+| v2.0 | 2026-03-21 | Sprint 3: 新增 MOD-014 dashboard、MOD-015 log_config; TC 范围扩展至 TC-133; 覆盖率更新 | AutoDev Pipeline |

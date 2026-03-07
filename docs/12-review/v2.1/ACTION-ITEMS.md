@@ -36,15 +36,15 @@
 
 | ID | 来源 | 改进项 | 影响模块 | 工作量 | 期限 |
 |----|------|--------|---------|--------|------|
-| **A-120** | RISK-007, TF-008 | task_id / target_dir 字符白名单校验 (只允许 `[a-zA-Z0-9_\-/.]`) | task_models.py | 0.5h | Week 3 |
-| **A-121** | RISK-010 | aider 版本锁定: config.yaml 增加 `aider_version` 字段，dispatch 前检查 | config.py, dispatcher.py | 1h | Week 3 |
-| **A-122** | RISK-013, v2.0 A-011 | JSON 结构化日志: loguru `serialize=True` + 统一字段 (task_id, module, level) | 所有模块 | 2h | Week 3 |
-| **A-123** | RISK-014, v2.0 A-012 | Prometheus 指标暴露: 任务成功率, SSH 延迟 p99, LLM 调用耗时, 机器利用率 | main.py, 新模块 | 4h | Week 3-4 |
-| **A-124** | 02-评审 §4 | contracts/ 接口契约文件: 至少编写 3 个核心接口的 YAML 契约 | contracts/ | 4h | Week 3-4 |
-| **A-125** | RISK-011 | LLM 请求/响应日志: 保存到 logs/llm_audit/ 用于质量回溯 | doc_analyzer.py, reviewer.py | 2h | Week 3 |
-| **A-126** | 01-评审 §2.1 | doc_analyzer MAX_DOC_LEN 可配置化 + 智能截断 (按优先级保留) | doc_analyzer.py | 1h | Week 3 |
-| **A-127** | RISK-009 | 日志脱敏: access_token / api_key 在日志中 mask 后 8 位 | reporter.py, config.py | 0.5h | Week 3 |
-| **A-128** | 01-评审 §2.1 | doc_analyzer._parse_tasks_from_llm 增加字段类型校验 (estimated_minutes 等) | doc_analyzer.py | 0.5h | Week 3 |
+| **A-120** | RISK-007, TF-008 | ✅ task_id / target_dir 字符白名单校验 (只允许 `[a-zA-Z0-9_\-/.]`) | task_models.py | 0.5h | Week 3 |
+| **A-121** | RISK-010 | ✅ aider 版本锁定: config.yaml 增加 `aider_version` 字段，dispatch 前检查 | config.py, dispatcher.py | 1h | Week 3 |
+| **A-122** | RISK-013, v2.0 A-011 | ✅ JSON 结构化日志: loguru `serialize=True` + 统一字段 (task_id, module, level) | 所有模块 | 2h | Week 3 |
+| **A-123** | RISK-014, v2.0 A-012 | ✅ Prometheus 指标暴露: 任务成功率, SSH 延迟 p99, LLM 调用耗时, 机器利用率 | main.py, 新模块 | 4h | Week 3-4 |
+| **A-124** | 02-评审 §4 | ✅ contracts/ 接口契约文件: 至少编写 3 个核心接口的 YAML 契约 | contracts/ | 4h | Week 3-4 |
+| **A-125** | RISK-011 | ✅ LLM 请求/响应日志: 保存到 logs/llm_audit/ 用于质量回溯 | doc_analyzer.py, reviewer.py | 2h | Week 3 |
+| **A-126** | 01-评审 §2.1 | ✅ doc_analyzer MAX_DOC_LEN 可配置化 + 智能截断 (按优先级保留) | doc_analyzer.py | 1h | Week 3 |
+| **A-127** | RISK-009 | ✅ 日志脱敏: access_token / api_key 在日志中 mask 后 8 位 | reporter.py, config.py | 0.5h | Week 3 |
+| **A-128** | 01-评审 §2.1 | ✅ doc_analyzer._parse_tasks_from_llm 增加字段类型校验 (estimated_minutes 等) | doc_analyzer.py | 0.5h | Week 3 |
 
 ---
 
@@ -93,3 +93,4 @@
 |------|------|---------|------|
 | v1.0 | 2026-03-07 | 初始版本: 24 项 ACTION-ITEMS | AutoDev Pipeline |
 | v1.1 | 2026-03-07 | P0 全部完成 (3/3); P1 全部完成 (8/8); 均为文档级设计变更 | AutoDev Pipeline |
+| v1.2 | 2026-03-07 | P2 全部完成 (9/9): A-120~A-128 均为文档级设计变更 | AutoDev Pipeline |

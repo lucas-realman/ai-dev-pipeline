@@ -4,7 +4,7 @@
 > **版本**: v1.0  
 > **状态**: 正式  
 > **更新日期**: 2026-03-07  
-> **对应源码**: `orchestrator/dispatcher.py` (326 行)  
+> **对应源码**: `orchestrator/dispatcher.py` (325 行)  
 > **上游文档**: [OD-MOD-007](../04-outline-design/OD-MOD-007-dispatcher.md) · [DD-SYS-001](DD-SYS-001-系统详细设计.md)  
 > **下游文档**: [TEST-001](../07-testing/TEST-001-测试策略与方案.md)
 
@@ -80,6 +80,15 @@ async function dispatch_task(task):
             machine = _get_machine(task, exclude=[machine.machine_id])
             if machine is None:
                 return TaskResult(exit_code=1, stderr="无可用机器")
+    
+    # ★v1.2 A-121: aider 版本锁定 — 分发前检测远程 aider 版本
+    expected_ver = config.aider_version   # 如 "0.82.1", 空则跳过
+    if expected_ver and not _is_local(machine):
+        ok, actual_ver = await _check_aider_version(machine, expected_ver)
+        if not ok:
+            log.warning("机器 %s aider 版本不匹配: 期望 %s, 实际 %s",
+                        machine.machine_id, expected_ver, actual_ver)
+            # 非阻塞: 仅警告, 继续分发 (运维可通过配置强制失败)
     
     start_time = time.time()
     log.info("分发到 %s", machine.machine_id)
@@ -318,14 +327,52 @@ async function _ssh_pre_check(machine):
 - 失败后 `registry.set_offline(machine_id)` 由调用方在 ALG-013 中完成
 - 不在此处重试 — 重试由任务重新调度实现
 
-### 2.9 `_collect_local_ips` (静态方法)
+### 2.9 `_check_aider_version` ★v1.2
+
+> 对应 ACTION-ITEM v2.1 A-121: 防止 aider 版本漂移导致调用行为不一致
+
+| 项目 | 内容 |
+|------|------|
+| **签名** | `async _check_aider_version(self, machine: MachineInfo, expected: str) → Tuple[bool, str]` |
+| **职责** | 远程执行 `aider --version`，与期望版本比较 |
+| **超时** | 10s |
+
+#### ALG-013b: aider 版本检查
+
+```
+async function _check_aider_version(machine, expected):
+    """
+    通过 SSH 在远程机器上执行 aider --version，比较版本号。
+    返回 (match: bool, actual_version: str)
+    """
+    cmd = f"{machine.aider_prefix} && aider --version 2>/dev/null || echo unknown"
+    
+    try:
+        proc = await _ssh_exec_simple(machine, cmd, timeout=10)
+        actual = proc.stdout.strip()   # 如 "aider 0.82.1"
+        # 提取版本号: 移除前缀 "aider "
+        ver_str = actual.replace("aider ", "").strip()
+        
+        if ver_str == expected:
+            return (True, ver_str)
+        return (False, ver_str)
+    except Exception:
+        return (False, "unknown")
+```
+
+**设计决策**:
+- **默认警告不阻塞**: 版本不匹配仅记录 WARNING，不中断分发，避免因小版本差异阻塞整条流水线
+- **可配置强制模式**: 未来可增加 `config.aider_version_strict=true` 使不匹配时返回失败
+- **与 SSH 预检复用**: 版本检查在 SSH 预检 (ALG-013a) 之后执行，此时已确认连通性
+
+### 2.10 `_collect_local_ips` (静态方法)
 
 | 项目 | 内容 |
 |------|------|
 | **职责** | 收集本机所有 IP 地址 |
 | **算法** | 初始集合 `{127.0.0.1, localhost, ::1}` + `socket.gethostname()` + `getaddrinfo()` |
 
-### 2.10 `_parse_changed_files` (静态方法)
+### 2.11 `_parse_changed_files` (静态方法)
 
 | 项目 | 内容 |
 |------|------|
@@ -382,6 +429,106 @@ Orchestrator    Dispatcher       远程机器          Git Remote
 
 ---
 
+## §3a AI 代码执行沙箱设计 ★v1.2
+
+> 对应 ACTION-ITEM: v1.0 A-019 — "AI 代码执行沙箱方案 (最小: cwd + 用户隔离)"
+
+### 3a.1 威胁模型
+
+aider 作为 AI 代码生成器，可能产出如下风险指令:
+
+| 威胁 | 风险等级 | 示例 |
+|------|---------|------|
+| 目录逃逸 | 🔴 高 | `../../etc/passwd`、`cd /` |
+| 系统命令注入 | 🔴 高 | `os.system("rm -rf /")` |
+| 网络外联 | 🟡 中 | `requests.get("http://evil.com")` |
+| 环境变量窃取 | 🟡 中 | `os.environ["OPENAI_API_KEY"]` |
+| 大量文件生成 | 🟢 低 | 创建 1000 个文件耗尽 inode |
+
+### 3a.2 最小沙箱方案: cwd + 用户隔离
+
+本系统采用 **"最小沙箱"** 策略，不引入 Docker/gVisor 等重型方案，
+通过操作系统级别的 cwd 锁定 + 用户隔离实现基本安全边界：
+
+#### 层次 1: 工作目录锁定 (cwd 隔离)
+
+```bash
+# ALG-014 构建的 SSH 脚本中已包含:
+cd {work_dir}                    # 进入项目目录
+# aider --yes-always 只操作当前目录下的文件
+
+# ★v1.2 新增: 目录边界校验
+# 在 _build_ssh_script 末尾追加:
+GENERATED_FILES=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || echo "")
+for f in $GENERATED_FILES; do
+  case "$f" in
+    ../*|/*) echo "[SANDBOX] 目录逃逸: $f" >&2; exit 99 ;;
+  esac
+done
+```
+
+- aider `--yes-always --auto-commits` 只在 `{work_dir}` 下操作
+- 生成后通过 `git diff --name-only` 检查文件路径
+- 任何逃逸 (`../` 或绝对路径) 返回 `exit 99`
+- Dispatcher 接收到 `exit_code=99` 时标记任务为 `ESCALATED`
+
+#### 层次 2: 用户隔离
+
+```yaml
+# config.yaml 中 Worker 机器配置示例:
+machines:
+  - host: 192.168.1.101
+    user: aider-worker          # ← 专用低权限用户
+    work_dir: /home/aider-worker/projects/myapp
+```
+
+| 隔离维度 | 措施 | 说明 |
+|---------|------|------|
+| **用户** | 专用 `aider-worker` 账号 | 不使用 `root` 或开发者个人账号 |
+| **权限** | `chmod 700 /home/aider-worker` | 无法访问其他用户目录 |
+| **sudo** | 不在 sudoers 中 | 无法提权 |
+| **SSH** | 仅 ed25519 密钥认证 | 禁用密码登录 |
+| **网络** | iptables 限制出站 | 仅允许 Git Remote + LLM API 端口 |
+
+#### 层次 3: 运行时限制
+
+```bash
+# SSH 脚本中追加 ulimit 限制:
+ulimit -f 102400        # 文件大小上限 100MB
+ulimit -n 256           # 打开文件描述符上限
+ulimit -u 64            # 子进程数上限
+ulimit -t 600           # CPU 时间上限 (秒)
+```
+
+### 3a.3 退出码语义扩展
+
+| exit_code | 含义 | 处理 |
+|-----------|------|------|
+| 0 | 正常完成 | CODING_DONE → REVIEW |
+| 1 | aider 编码失败 | RETRY (最多 3 次) |
+| 99 | **沙箱违规 (目录逃逸)** | **ESCALATED (不重试)** |
+| 124 | 超时 (timeout) | RETRY |
+| 137 / -9 | OOM killed | RETRY + 机器标记 WARNING |
+
+### 3a.4 设计决策
+
+| 决策 | 选择 | 理由 |
+|------|------|------|
+| Docker vs 用户隔离 | 用户隔离 | Worker 机器 ≤3 台、性能开销低、无 Docker 依赖 |
+| 实时文件监控 vs 事后校验 | 事后校验 | inotify 监控引入复杂度，git diff 已足够 |
+| 网络隔离级别 | iptables 白名单 | 仅允许 Git Remote + LLM API，运维可控 |
+| exit_code 99 处理 | ESCALATED (不重试) | 沙箱违规视为安全事件，必须人工介入 |
+
+### 3a.5 演进路线
+
+```
+Phase 1 (当前): cwd 锁定 + 用户隔离 + ulimit
+Phase 2 (后续): Docker 容器化 (需评估性能影响)
+Phase 3 (远期): gVisor/Firecracker 微虚拟机
+```
+
+---
+
 ## §4 配置参数
 
 | 配置路径 | 类型 | 说明 |
@@ -401,3 +548,4 @@ Orchestrator    Dispatcher       远程机器          Git Remote
 |------|------|---------|
 | v1.0 | 2026-03-07 | 从 DD-001 §7 提取并扩充，形成独立模块详述 |
 | v1.1 | 2026-03-07 | ALG-013a SSH 预检; ALG-014 API Key env 传递+退出码边界; A-117 推送策略增强 |
+| v1.2 | 2026-03-07 | §2.9 新增 ALG-013b aider 版本检查; ALG-013 分发前插入版本比对 (A-121); §3a AI 代码执行沙箱设计 — cwd 锁定+用户隔离+ulimit (A-019) |

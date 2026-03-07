@@ -4,7 +4,7 @@
 > **版本**: v1.0  
 > **状态**: 正式  
 > **更新日期**: 2026-03-07  
-> **对应源码**: `orchestrator/doc_analyzer.py` (292 行)  
+> **对应源码**: `orchestrator/doc_analyzer.py` (291 行)  
 > **上游文档**: [OD-MOD-001](../04-outline-design/OD-MOD-001-doc_analyzer.md) · [DD-SYS-001](DD-SYS-001-系统详细设计.md)  
 > **下游文档**: [TEST-001](../07-testing/TEST-001-测试策略与方案.md)
 
@@ -140,18 +140,37 @@ async function analyze_and_decompose(sprint, extra_context):
 | **算法** | ALG-003 |
 | **约束** | 单文档截断阈值 `MAX_DOC_LEN = 6000` 字符 |
 
-#### ALG-003: Prompt 构建算法
+#### ALG-003: Prompt 构建算法 (含智能截断 ★v1.2)
 
 ```
 function _build_decompose_prompt(doc_set, sprint, extra_context):
-    MAX_DOC_LEN = 6000
+    # ★v1.2 A-126: 从配置读取，默认 6000
+    MAX_DOC_LEN = config.get("llm.doc_max_len", 6000)
+    
     doc_sections = []
     
-    for (doc_type, content) in doc_set:
+    # ★v1.2: 智能截断优先级 — 确保高价值文档类型获得更多空间
+    PRIORITY_ORDER = [
+        "requirements",    # 需求文档最优先
+        "contracts",       # 接口契约次优先
+        "sprint_cards",    # Sprint 任务卡
+        "design",          # 设计文档
+    ]
+    # 未在优先级列表中的文档类型，获得较短的截断额度
+    sorted_doc_types = []
+    for dt in PRIORITY_ORDER:
+        if dt in doc_set:
+            sorted_doc_types.append(dt)
+    for dt in doc_set:
+        if dt not in sorted_doc_types:
+            sorted_doc_types.append(dt)
+    
+    for doc_type in sorted_doc_types:
+        content = doc_set[doc_type]
         truncated = content[:MAX_DOC_LEN]
         if len(content) > MAX_DOC_LEN:
-            truncated += "\n\n... (截断, 原文 {len} 字符)"
-        doc_sections.append("## {doc_type}\n{truncated}")
+            truncated += f"\n\n... (截断, 原文 {len(content)} 字符)"
+        doc_sections.append(f"## {doc_type}\n{truncated}")
     
     docs_text = join(doc_sections, "\n\n---\n\n")
     sprint_hint = sprint ? "注意: 只分解 Sprint {sprint}" : ""
@@ -159,6 +178,10 @@ function _build_decompose_prompt(doc_set, sprint, extra_context):
     
     return PROMPT_TEMPLATE.format(docs_text, sprint_hint, extra_hint)
 ```
+
+**★v1.2 变更说明**:
+- `MAX_DOC_LEN` 从硬编码 6000 改为通过 `config.get("llm.doc_max_len", 6000)` 读取，支持运维按照 LLM 上下文窗口大小调整
+- 智能截断优先级: requirements > contracts > sprint_cards > design > 其他，确保高价值文档优先被包含
 
 **Prompt 模板包含**:
 - 角色定义（任务分解引擎）
@@ -252,14 +275,139 @@ async function _call_llm(prompt):
 | 连接超时 | ✅ | 指数退避 1s→2s→4s | 网络问题 |
 | 重试耗尽 | — | 抛 `LLMConnectionError` | 上游 `analyze_and_decompose` catch 后返回 `[]` |
 
+### 2.5a LLM 审计日志 ★v1.2
+
+> 对应 ACTION-ITEM v2.1 A-125: 记录每次 LLM 调用的请求/响应，支撑质量追溯和成本分析
+
+每次 `_call_llm` 调用成功后，将请求与响应存储白到审计日志目录。
+
+**存储结构**:
+```
+logs/llm_audit/
+├── 2026-03-07/
+│   ├── 143201_doc_analyzer_req.json
+│   ├── 143201_doc_analyzer_resp.json
+│   ├── 143512_reviewer_l2_req.json
+│   ├── 143512_reviewer_l2_resp.json
+│   └── ...
+└── 2026-03-08/
+    └── ...
+```
+
+**审计记录格式**:
+```json
+// *_req.json
+{
+  "timestamp": "2026-03-07T14:32:01",
+  "module": "doc_analyzer",
+  "model": "claude-sonnet-4-6",
+  "temperature": 0.2,
+  "max_tokens": 4096,
+  "prompt_chars": 12345,
+  "prompt_preview": "(前 200 字符)..."
+}
+
+// *_resp.json
+{
+  "timestamp": "2026-03-07T14:32:08",
+  "module": "doc_analyzer",
+  "status": "success",
+  "response_chars": 3456,
+  "latency_ms": 7200,
+  "retry_count": 0,
+  "response_preview": "(前 200 字符)..."
+}
+```
+
+**设计决策**:
+| 决策 | 说明 |
+|------|------|
+| 分日子目录 | 方便按日期清理和归档 |
+| 只存 preview | 完整 prompt/response 可能包含敏感信息，仅存前 200 字符摘要 |
+| 不阻塞主流程 | 审计写入失败仅 WARNING，不影响 LLM 调用结果 |
+| 复用设计 | DocAnalyzer 和 AutoReviewer (DD-MOD-008) 共享相同审计格式，通过 `module` 字段区分来源 |
+
 ### 2.6 `_parse_tasks_from_llm`
 
 | 项目 | 内容 |
 |------|------|
 | **签名** | `_parse_tasks_from_llm(self, response: str) → List[CodingTask]` |
-| **职责** | 将 LLM 文本回复解析为 CodingTask 列表 |
-| **算法** | 调用 `_extract_json` → 遍历数组 → 构造 CodingTask |
+| **职责** | 将 LLM 文本回复解析为 CodingTask 列表，含字段类型校验 |
+| **算法** | 调用 `_extract_json` → 遍历数组 → 字段校验 → 构造 CodingTask |
 | **异常** | 非数组 → `ValueError` |
+
+#### ALG-006: 任务解析与字段校验 ★v1.2
+
+> 对应 ACTION-ITEM v2.1 A-128: 防止 LLM 返回类型不匹配的字段值
+
+```
+function _parse_tasks_from_llm(response):
+    data = _extract_json(response)
+    if not isinstance(data, list):
+        raise ValueError("期望 JSON 数组, 实际类型: " + type(data).__name__)
+    
+    tasks = []
+    for i, item in enumerate(data):
+        # ★v1.2: 字段类型校验 & 清洗
+        errors = []
+        
+        # task_id: 必填, str, 非空
+        task_id = item.get("task_id")
+        if not task_id or not isinstance(task_id, str):
+            errors.append(f"task_id 缺失或非字符串")
+        
+        # description: 必填, str, 非空
+        description = item.get("description")
+        if not description or not isinstance(description, str):
+            errors.append(f"description 缺失或非字符串")
+        
+        # estimated_minutes: int, >0
+        est = item.get("estimated_minutes", 30)
+        if not isinstance(est, (int, float)) or est <= 0:
+            log.warning("任务[%d] estimated_minutes 无效(%s), 回退默认 30", i, est)
+            item["estimated_minutes"] = 30
+        else:
+            item["estimated_minutes"] = int(est)  # float → int
+        
+        # tags: list of str
+        tags = item.get("tags", [])
+        if not isinstance(tags, list):
+            log.warning("任务[%d] tags 非数组(%s), 回退空列表", i, type(tags).__name__)
+            item["tags"] = []
+        else:
+            item["tags"] = [str(t) for t in tags]  # 确保全为 str
+        
+        # depends_on: list of str
+        deps = item.get("depends_on", [])
+        if not isinstance(deps, list):
+            log.warning("任务[%d] depends_on 非数组, 回退空列表", i)
+            item["depends_on"] = []
+        
+        # 必填字段缺失则跳过该任务
+        if errors:
+            log.error("跳过无效任务[%d]: %s", i, "; ".join(errors))
+            continue
+        
+        tasks.append(CodingTask(**{
+            k: v for k, v in item.items()
+            if k in CodingTask.__dataclass_fields__
+        }))
+    
+    log.info("解析出 %d 个有效任务 (原始 %d 项)", len(tasks), len(data))
+    return tasks
+```
+
+**校验规则汇总**:
+
+| 字段 | 类型要求 | 失败策略 | 说明 |
+|------|---------|---------|------|
+| `task_id` | str, 非空 | 跳过该任务 | 必填标识，无法回退 |
+| `description` | str, 非空 | 跳过该任务 | 必填描述，无法回退 |
+| `estimated_minutes` | int, >0 | 回退 30 | LLM 可能返回字符串或负数 |
+| `tags` | List[str] | 回退 [] | LLM 可能返回字符串 |
+| `depends_on` | List[str] | 回退 [] | LLM 可能返回单值 |
+
+> 与 DD-MOD-005 §3.2 `__post_init__` 形成双层防御: §2.6 做类型清洗, `__post_init__` 做格式校验
 
 ### 2.7 `_extract_json` (静态方法)
 
@@ -382,7 +530,7 @@ doc_set:
 
 | 常量/配置 | 值 | 说明 |
 |-----------|---|------|
-| `MAX_DOC_LEN` | 6000 | 单文档截断阈值 (字符数) |
+| `MAX_DOC_LEN` | `config.get("llm.doc_max_len", 6000)` | 单文档截断阈值 (字符数) ★v1.2: 可配置 |
 | `temperature` | 0.2 | LLM 调用温度 |
 | `max_tokens` | 4096 | LLM 最大回复 token 数 |
 | `timeout` | 180s | httpx 客户端超时 |
@@ -395,3 +543,4 @@ doc_set:
 |------|------|---------|
 | v1.0 | 2026-03-07 | 从 DD-001 §1 提取并扩充，形成独立模块详述 |
 | v1.1 | 2026-03-07 | `_call_llm` 增加 3× 指数退避重试 (ALG-005); 新增重试决策矩阵 |
+| v1.2 | 2026-03-07 | §2.5a LLM 审计日志; §2.6 字段类型校验 (A-125/A-128); MAX_DOC_LEN 可配置化 (A-126) |

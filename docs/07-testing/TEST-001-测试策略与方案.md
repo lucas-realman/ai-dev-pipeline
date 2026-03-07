@@ -189,6 +189,12 @@
 | TC-112 | 升级链路 | IF-006,008,010,011 | dispatch → review fail × 4 → ESCALATED → notify_task_escalated |
 | TC-113 | 空 Sprint | IF-002,003 | 文档无任务卡 → 空列表 → sprint_summary(0 tasks) |
 | TC-114 | 机器全离线 | IF-004,005 | registry 全 ERROR → next_batch 返回空 → 等待 |
+| TC-115 | 循环依赖检测 ★v1.2 | IF-003 | enqueue([A→B, B→C, C→A]) → DependencyCycleError, 日志含环路径 |
+| TC-116 | 快照恢复链路 ★v1.2 | IF-003,004 | 1) 执行至 3/5 任务 PASSED 2) 模拟崩溃 3) 从 snapshot 恢复 → DISPATCHED 任务变为 RETRY, PASSED 保持 |
+| TC-117 | LLM 降级全链路 ★v1.2 | IF-002,008 | mock LLM 超时 3 次 → DocAnalyzer 降级到 DocParser, Reviewer L2/L3 自动 3.5 分通过, 报告标记 "LLM_DEGRADED" |
+| TC-118 | 沙箱违规拦截 ★v1.2 | IF-006,010 | mock dispatch_task 返回 exit_code=99 → 任务直接 ESCALATED (不重试), 钉钉通知含 "沙箱违规" |
+| TC-119 | SSH 预检 + 机器淘汰 ★v1.2 | IF-004,005,006 | 3 台机器, 1 台 SSH 预检失败 → 标记 OFFLINE → next_batch 只分配到 2 台 → 任务正常完成 |
+| TC-11A | JSON 结构化日志链路 ★v1.2 | IF-001~012 | 开启 JSON 日志模式 → 执行 1 个 Sprint → 日志文件每行可 json.loads(), 含 event/task_id/sprint_id 字段 |
 
 ### 2.5 L4 验收测试
 
@@ -274,3 +280,4 @@ pytest -m acceptance -s -v
 | v1.0 | 2026-03-06 | 初始版本：4 层测试策略 + 45 个 TC + 自动化执行 | AutoDev Pipeline |
 | v1.1 | 2026-03-06 | 修正: MOD 编号与 OD-001 对齐, FR 映射修正 (A-002) | AutoDev Pipeline |
 | v1.2 | 2026-03-06 | 新增: FR-003 (TC-054~055), FR-018 (TC-093~094), FR-023 (TC-034~035) 共 6 条测试用例 (A-008) | AutoDev Pipeline |
+| v1.3 | 2026-03-07 | L3 集成测试补充 7 条 (TC-115~TC-11A): 循环依赖检测、快照恢复、LLM 降级、沙箱违规、SSH 预检、JSON 日志链路 (A-022/A-023) | AutoDev Pipeline |

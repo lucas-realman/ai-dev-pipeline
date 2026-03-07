@@ -1,0 +1,245 @@
+# =====================================================
+# 接口契约: AutoReviewer (自动代码审查)
+# 文档编号: CONTRACT-003
+# 对应文档: DD-MOD-008 (reviewer.py 详细设计)
+#           OD-003 §1.7 (IF-008)
+#           DD-SYS-001 §4.2 (ReviewerProtocol)
+# ACTION-ITEM: v2.1 A-124
+# =====================================================
+
+contract:
+  id: CONTRACT-003
+  name: AutoReviewer
+  version: "1.0"
+  type: protocol
+  module: orchestrator.reviewer
+  source_file: orchestrator/reviewer.py
+  source_lines: 262
+  description: >
+    三层自动代码审查模块。Layer 1 (静态检查) → Layer 2 (LLM 契约对齐) →
+    Layer 3 (LLM 设计符合度)。实行短路策略: 任何层失败即返回，不继续后续层。
+
+# ─── Protocol 定义 ──────────────────────────────────
+protocol:
+  name: ReviewerProtocol
+  reference: "DD-SYS-001 §4.2"
+  methods:
+    - review
+
+# ─── 方法定义 ──────────────────────────────────────
+methods:
+
+  - name: review
+    async: true
+    description: "对单个任务执行三层自动审查"
+    parameters:
+      - name: task
+        type: CodingTask
+        required: true
+        description: "待审查任务 (需含 acceptance criteria)"
+      - name: result
+        type: TaskResult
+        required: true
+        description: "编码执行结果 (需含 files_changed, stdout)"
+        preconditions:
+          - "result.exit_code is not None"
+          - "result.files_changed is list"
+    returns:
+      type: ReviewResult
+      description: >
+        审查结果，包含:
+        - passed: bool — 是否通过
+        - layer: int — 在哪一层停止 (1/2/3)
+        - issues: List[str] — 发现的问题列表
+        - fix_instruction: Optional[str] — 修复建议 (L2/L3 失败时)
+        - score: float — L2/L3 的 LLM 评分 (1.0~5.0)
+      postconditions:
+        - "result.layer in (1, 2, 3)"
+        - "if result.passed: result.layer == 3"
+        - "result.score >= 1.0 and result.score <= 5.0"
+
+    execution_flow:
+      reference: "DD-MOD-008 ALG-010"
+      layers:
+        - layer: 1
+          name: "静态检查 (Local)"
+          cost: "0 (无 LLM 调用)"
+          tools:
+            - "py_compile: 语法检查"
+            - "ruff: 代码规范检查"
+          pass_condition: "py_compile 成功 AND ruff 无 error 级别问题"
+          fail_action: "短路返回 ReviewResult(passed=False, layer=1)"
+
+        - layer: 2
+          name: "LLM 契约对齐 (Cloud)"
+          cost: "1 次 LLM 调用"
+          input: "task.acceptance + result.files_changed 内容"
+          prompt_template: >
+            请审查以下代码变更是否满足验收标准:
+            ## 验收标准
+            {acceptance}
+            ## 代码变更
+            {diff}
+            请返回 JSON: {"score": float, "issues": [...], "fix_instruction": "..."}
+          pass_condition: "score >= 3.5"
+          fail_action: "短路返回 ReviewResult(passed=False, layer=2, fix_instruction=...)"
+          retry:
+            strategy: exponential_backoff
+            max_retries: 3
+            reference: "DD-MOD-001 ALG-005"
+
+        - layer: 3
+          name: "LLM 设计符合度 (Cloud)"
+          cost: "1 次 LLM 调用"
+          input: "设计文档摘要 + 代码变更"
+          pass_condition: "score >= 3.5"
+          fail_action: "返回 ReviewResult(passed=False, layer=3, fix_instruction=...)"
+          retry:
+            strategy: exponential_backoff
+            max_retries: 3
+
+    raises:
+      - type: LLMConnectionError
+        code: ERR-009
+        condition: "LLM API 不可达 (L2/L3)"
+        handling: >
+          重试 3 次 → 仍失败则降级:
+          score = 3.5 (边界通过), 
+          issues = ["LLM 不可用, 降级为自动通过"]
+      - type: LLMResponseError
+        code: ERR-010
+        condition: "LLM 返回无法解析为 JSON"
+        handling: "_extract_json 三级解析 → 仍失败则降级"
+
+  - name: _layer1_static_check
+    async: false
+    visibility: protected
+    description: "Layer 1: py_compile + ruff"
+    parameters:
+      - name: files
+        type: "List[str]"
+        required: true
+        description: "变更文件路径列表"
+    returns:
+      type: "Tuple[bool, List[str]]"
+      description: "(通过, 问题列表)"
+
+  - name: _layer2_contract_alignment
+    async: true
+    visibility: protected
+    description: "Layer 2: LLM 检查代码是否满足验收标准"
+    parameters:
+      - name: task
+        type: CodingTask
+        required: true
+      - name: diff_content
+        type: str
+        required: true
+    returns:
+      type: "Tuple[float, List[str], Optional[str]]"
+      description: "(score, issues, fix_instruction)"
+    llm_audit:
+      module_tag: "reviewer_l2"
+      reference: "DD-MOD-001 §2.5a"
+
+  - name: _layer3_design_compliance
+    async: true
+    visibility: protected
+    description: "Layer 3: LLM 检查代码是否符合设计文档"
+    parameters:
+      - name: task
+        type: CodingTask
+        required: true
+      - name: diff_content
+        type: str
+        required: true
+    returns:
+      type: "Tuple[float, List[str], Optional[str]]"
+      description: "(score, issues, fix_instruction)"
+    llm_audit:
+      module_tag: "reviewer_l3"
+      reference: "DD-MOD-001 §2.5a"
+
+# ─── 数据类型定义 ──────────────────────────────────
+data_types:
+
+  - name: ReviewResult
+    type: dataclass
+    fields:
+      - name: passed
+        type: bool
+        description: "最终通过判定"
+      - name: layer
+        type: int
+        description: "停止层 (1/2/3)"
+      - name: issues
+        type: "List[str]"
+        description: "问题列表"
+      - name: fix_instruction
+        type: "Optional[str]"
+        description: "修复建议"
+      - name: score
+        type: float
+        description: "综合评分 (1.0~5.0)"
+      - name: duration_sec
+        type: float
+        description: "审查耗时 (秒)"
+
+# ─── 上下游依赖 ────────────────────────────────────
+dependencies:
+  upstream:
+    - module: state_machine
+      interface: "start_review() → CODING_DONE → REVIEW"
+      description: "状态机触发审查"
+    - module: dispatcher
+      interface: "TaskResult (含 files_changed)"
+      description: "编码结果作为审查输入"
+  downstream:
+    - module: state_machine
+      interface: "review_done(result) → TESTING / RETRY / ESCALATED"
+      description: "审查结果驱动状态流转"
+    - module: reporter
+      interface: "notify_task_escalated(task)"
+      description: "审查失败且超过重试次数时通知"
+
+# ─── 降级策略 ──────────────────────────────────────
+degradation:
+  trigger: "LLM 连续 3 次调用失败"
+  behavior:
+    layer_2: "score = 3.5, passed = True, issues = ['LLM 降级: 自动通过']"
+    layer_3: "score = 3.5, passed = True, issues = ['LLM 降级: 自动通过']"
+  rationale: >
+    在 LLM 不可用期间不阻塞流水线。
+    降级通过的任务会在报告中标记为 "LLM_DEGRADED"，
+    需在 LLM 恢复后人工复查。
+
+# ─── 配置项 ──────────────────────────────────────
+config:
+  fields:
+    - key: review.l2_threshold
+      type: float
+      default: 3.5
+      description: "L2 通过分数线"
+    - key: review.l3_threshold
+      type: float
+      default: 3.5
+      description: "L3 通过分数线"
+    - key: review.skip_l3
+      type: bool
+      default: false
+      description: "是否跳过 L3 (快速模式)"
+
+# ─── 质量门禁 ──────────────────────────────────────
+quality_gates:
+  - name: "L1 单元测试"
+    requirement: "构造含语法错误/ruff 违规的文件，验证 L1 拦截"
+    level: L2
+  - name: "L2 单元测试"
+    requirement: "mock LLM 返回低分/高分 JSON，验证通过/拒绝路径"
+    level: L2
+  - name: "降级测试"
+    requirement: "mock LLM 超时，验证自动降级为 3.5 分通过"
+    level: L2
+  - name: "三层集成测试"
+    requirement: "真实代码变更 + 真实 LLM，验证 L1→L2→L3 完整链路"
+    level: L3

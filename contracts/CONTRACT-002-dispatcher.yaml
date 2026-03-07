@@ -1,0 +1,195 @@
+# =====================================================
+# 接口契约: Dispatcher (任务分发)
+# 文档编号: CONTRACT-002
+# 对应文档: DD-MOD-007 (dispatcher.py 详细设计)
+#           OD-003 §1.6 (IF-006/IF-007)
+#           DD-SYS-001 §4.2 (DispatcherProtocol)
+# ACTION-ITEM: v2.1 A-124
+# =====================================================
+
+contract:
+  id: CONTRACT-002
+  name: Dispatcher
+  version: "1.0"
+  type: protocol
+  module: orchestrator.dispatcher
+  source_file: orchestrator/dispatcher.py
+  source_lines: 325
+  description: >
+    任务分发核心模块。负责将 CodingTask 通过 SSH 分发到远程 Worker 机器，
+    执行 aider 编码，收集结果。支持本地/远程两种执行模式。
+
+# ─── Protocol 定义 ──────────────────────────────────
+protocol:
+  name: DispatcherProtocol
+  reference: "DD-SYS-001 §4.2"
+  methods:
+    - dispatch_task
+    - dispatch_batch
+
+# ─── 方法定义 ──────────────────────────────────────
+methods:
+
+  - name: dispatch_task
+    async: true
+    description: "单任务分发执行"
+    parameters:
+      - name: task
+        type: CodingTask
+        required: true
+        description: "待执行的编码任务 (状态须为 DISPATCHED)"
+        preconditions:
+          - "task.status == TaskStatus.DISPATCHED"
+          - "task.assigned_machine is not None"
+          - "task.task_id 符合 _SAFE_ID_RE 正则 (DD-MOD-005 §3.2)"
+    returns:
+      type: TaskResult
+      description: "执行结果，含 exit_code, stdout, stderr, files_changed, duration"
+      postconditions:
+        - "result.task_id == task.task_id"
+        - "result.exit_code is int"
+        - "result.duration >= 0"
+    raises:
+      - type: SSHConnectionError
+        code: ERR-013
+        condition: "SSH 连接失败 (超时/认证/网络)"
+        handling: "机器标记 ERROR → 任务迁移"
+      - type: SCPTransferError
+        code: ERR-014
+        condition: "SCP 文件传输失败"
+        handling: "重试 1 次 → 失败则 ESCALATED"
+      - type: TimeoutError
+        condition: "超过 single_task_timeout (默认 600s)"
+        handling: "kill 远程进程 → 任务进入 RETRY"
+    execution_flow:
+      reference: "DD-MOD-007 ALG-013"
+      steps:
+        - step: 1
+          action: "_check_aider_version (ALG-013b)"
+          description: "版本检查 (warning-only, 不阻断)"
+        - step: 2
+          action: "获取 machine_info"
+          description: "从 registry 或 task.assigned_machine"
+        - step: 3
+          action: "检测 local vs remote"
+          description: "is_local = (host in ['localhost', '127.0.0.1'])"
+        - step: 4
+          action: "构造 aider 指令"
+          description: "写入 /tmp/aider_msg_{task_id}"
+        - step: 5
+          action: "scp 指令文件到远程"
+          description: "scp → {work_dir}/tmp/"
+        - step: 6
+          action: "ssh exec aider"
+          description: "异步执行，超时控制"
+        - step: 7
+          action: "收集结果"
+          description: "stdout/stderr/exit_code/files_changed"
+        - step: 8
+          action: "LLM 审计日志"
+          description: "写入 logs/llm_audit/ (如果涉及 LLM)"
+
+  - name: dispatch_batch
+    async: true
+    description: "并行批量分发"
+    parameters:
+      - name: tasks
+        type: "List[CodingTask]"
+        required: true
+        description: "一批可并行执行的任务"
+    returns:
+      type: "List[TaskResult]"
+      description: "与 tasks 一一对应的结果列表"
+    implementation_notes: >
+      内部使用 asyncio.gather(*[dispatch_task(t) for t in tasks])
+      单个任务失败不影响其他任务
+
+  - name: _ssh_exec
+    async: true
+    visibility: protected
+    description: "底层 SSH 命令执行"
+    parameters:
+      - name: machine
+        type: MachineInfo
+        required: true
+      - name: command
+        type: str
+        required: true
+      - name: timeout
+        type: int
+        default: 600
+    returns:
+      type: "Tuple[int, str, str]"
+      description: "(exit_code, stdout, stderr)"
+    error_detection:
+      - pattern: "No space left on device"
+        action: "raise DiskFullError(ERR-022)"
+      - pattern: "Killed|exit=-9"
+        action: "raise OOMError(ERR-023)"
+
+  - name: _check_aider_version
+    async: true
+    visibility: protected
+    description: "检查远程 aider 版本是否匹配配置"
+    parameters:
+      - name: machine
+        type: MachineInfo
+        required: true
+    returns:
+      type: bool
+      description: "版本匹配返回 True"
+    reference: "DD-MOD-007 §2.9 (ALG-013b)"
+    behavior: "warning-only, 不阻断任务分发"
+
+# ─── 上下游依赖 ────────────────────────────────────
+dependencies:
+  upstream:
+    - module: task_engine
+      interface: "next_batch() → List[CodingTask]"
+      description: "接收已分配机器的任务批次"
+    - module: machine_registry
+      interface: "get_machine(host) → MachineInfo"
+      description: "获取机器连接信息"
+  downstream:
+    - module: state_machine
+      interface: "coding_done(result)"
+      description: "报告编码完成结果 → 状态流转"
+    - module: reporter
+      interface: "round_summary(batch, results)"
+      description: "批次执行后通知"
+
+# ─── SSH 预检契约 ────────────────────────────────────
+ssh_precheck:
+  reference: "DD-MOD-007 §2.8 (ALG-012)"
+  command: "ssh -T -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new {user}@{host} 'echo __DISPATCHER_PING__'"
+  success_condition: "exit_code == 0 AND stdout contains '__DISPATCHER_PING__'"
+  failure_action: "标记机器 OFFLINE, 日志 WARNING"
+
+# ─── 配置项 ──────────────────────────────────────
+config:
+  fields:
+    - key: task.single_task_timeout
+      type: int
+      default: 600
+      unit: seconds
+      description: "单任务超时"
+    - key: task.concurrent_limit
+      type: int
+      default: 3
+      description: "最大并行任务数"
+    - key: task.aider_version
+      type: str
+      default: ""
+      description: "期望 aider 版本 (空=跳过检查)"
+
+# ─── 质量门禁 ──────────────────────────────────────
+quality_gates:
+  - name: "单元测试"
+    requirement: "mock SSH 执行，验证超时/错误/正常路径"
+    level: L2
+  - name: "集成测试"
+    requirement: "真实 SSH 到测试机器执行 echo 命令"
+    level: L3
+  - name: "性能测试"
+    requirement: "3 机器并行分发，验证 asyncio.gather 无阻塞"
+    level: L3

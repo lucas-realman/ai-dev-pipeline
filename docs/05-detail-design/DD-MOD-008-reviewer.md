@@ -4,7 +4,7 @@
 > **版本**: v1.0  
 > **状态**: 正式  
 > **更新日期**: 2026-03-07  
-> **对应源码**: `orchestrator/reviewer.py` (263 行)  
+> **对应源码**: `orchestrator/reviewer.py` (262 行)  
 > **上游文档**: [OD-MOD-008](../04-outline-design/OD-MOD-008-reviewer.md) · [DD-SYS-001](DD-SYS-001-系统详细设计.md)  
 > **下游文档**: [TEST-001](../07-testing/TEST-001-测试策略与方案.md)
 
@@ -219,7 +219,7 @@ AutoReviewer 的 `_call_llm` 采用与 DocAnalyzer ALG-005 相同的重试策略
 - 4xx (非 429) → 不重试, 立即抛出
 - 连接/超时 → 指数退避 1s→2s→4s
 - 重试耗尽 → 抛出 `LLMConnectionError` (ERR-009), 由 L2/L3 降级策略兜底
-
+**LLM 审计日志** ★v1.2: AutoReviewer 的 `_call_llm` 与 DocAnalyzer 共享审计日志机制 (见 DD-MOD-001 §2.5a)，通过 `module` 字段区分为 `"reviewer_l2"` / `"reviewer_l3"`。审计记录存储在 `logs/llm_audit/{date}/` 目录下。
 ### 2.6 `_parse_json_response` (静态方法)
 
 | 项目 | 内容 |
@@ -291,3 +291,4 @@ Orchestrator     AutoReviewer      subprocess       LLM API
 |------|------|---------|
 | v1.0 | 2026-03-07 | 从 DD-001 §8 提取并扩充，形成独立模块详述 |
 | v1.1 | 2026-03-07 | `_call_llm` 增加 3× 指数退避重试; L3 降级分从 4.0 调为 3.5 |
+| v1.2 | 2026-03-07 | LLM 审计日志机制 (与 DD-MOD-001 §2.5a 共享)，区分 reviewer_l2/l3 (A-125) |

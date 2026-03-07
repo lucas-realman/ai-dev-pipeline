@@ -212,21 +212,162 @@ logging.basicConfig(
 | 模块 | `name` | `orchestrator.dispatcher` |
 | 消息 | 自由文本 | `任务 T-001 分发到 4090` |
 
-### 3.4 结构化日志扩展 (待实现)
+### 3.4 结构化日志设计 ★v1.2
 
-未来可扩展为 JSON 格式:
+> 对应 ACTION-ITEM v2.1 A-122 / v2.0 A-011 / v1.0 A-018: JSON 结构化日志
+
+当前 §3.3 的文本格式日志适合人工阅读，但不利于 ELK/Loki 等日志分析平台聚合检索。设计 JSON 结构化日志作为可选输出模式。
+
+#### 启用方式
+
+```yaml
+# config.yaml
+logging:
+  level: "INFO"
+  format: "json"          # ★v1.2: "text" (默认, 当前行为) | "json" (结构化)
+  json_file: "logs/orchestrator.jsonl"   # JSON 日志落盘路径 (可选)
+```
+
+#### JSON 日志 Schema
 
 ```json
 {
-  "timestamp": "2026-03-07T14:32:01",
+  "ts": "2026-03-07T14:32:01.123Z",
   "level": "INFO",
-  "module": "orchestrator.dispatcher",
+  "logger": "orchestrator.dispatcher",
+  "msg": "任务 T-001 分发到 4090",
   "task_id": "T-001",
-  "machine": "4090",
+  "machine_id": "4090",
+  "sprint_id": "sprint-001",
   "event": "task_dispatched",
-  "message": "任务 T-001 分发到 4090"
+  "duration_ms": null,
+  "extra": {}
 }
 ```
+
+**字段规范**:
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `ts` | ISO8601 | ✅ | UTC 时间戳, 毫秒精度 |
+| `level` | str | ✅ | DEBUG / INFO / WARNING / ERROR / CRITICAL |
+| `logger` | str | ✅ | Logger 名称 (§3.1 命名规范) |
+| `msg` | str | ✅ | 可读消息 (经过脱敏 §3.5) |
+| `task_id` | str | ❌ | 当前任务 ID (上下文注入) |
+| `machine_id` | str | ❌ | 当前机器 ID |
+| `sprint_id` | str | ❌ | 当前 Sprint ID |
+| `event` | str | ❌ | 结构化事件名 (见下表) |
+| `duration_ms` | int | ❌ | 操作耗时 (毫秒) |
+| `extra` | dict | ❌ | 自定义扩展字段 |
+
+**标准 event 名称**:
+
+| event | 触发点 | 级别 |
+|-------|--------|------|
+| `sprint_start` | Orchestrator 启动 Sprint | INFO |
+| `sprint_done` | Sprint 完成 | INFO |
+| `task_dispatched` | Dispatcher 分发任务 | INFO |
+| `task_completed` | 任务编码完成 | INFO |
+| `review_passed` | 审查通过 | INFO |
+| `review_failed` | 审查失败 | WARNING |
+| `test_passed` | 测试通过 | INFO |
+| `test_failed` | 测试失败 | WARNING |
+| `llm_call` | LLM API 调用 | DEBUG |
+| `llm_retry` | LLM 重试 | WARNING |
+| `llm_degraded` | LLM 降级兜底 | WARNING |
+| `ssh_pre_check_fail` | SSH 预检失败 | WARNING |
+| `machine_offline` | 机器下线 | ERROR |
+| `snapshot_saved` | 状态快照保存 | DEBUG |
+| `crash_recovery` | 崩溃恢复 | WARNING |
+
+#### 实现方案: loguru serialize
+
+推荐使用 `loguru` 库替代 stdlib logging，利用其内置 `serialize=True` 输出 JSON:
+
+```python
+from loguru import logger
+
+# JSON 结构化输出 (落盘)
+logger.add(
+    "logs/orchestrator.jsonl",
+    serialize=True,
+    rotation="50 MB",
+    retention="30 days",
+    level=config.log_level,
+    filter=SanitizeFilter()   # §3.5 脱敏过滤器
+)
+
+# 控制台文本输出 (保留人类可读)
+logger.add(
+    sys.stderr,
+    format="{time:HH:mm:ss} [{level}] {name}: {message}",
+    level=config.log_level,
+)
+```
+
+**loguru 选择理由**: 原生支持 `serialize`、rotation、结构化上下文注入 (`logger.bind(task_id=xx)`)，对比 stdlib `json` formatter 方案开发量更低。
+
+#### 上下文注入
+
+```python
+# 任务作用域: 自动注入 task_id + machine_id
+with logger.contextualize(task_id=task.task_id, machine_id=machine.machine_id):
+    logger.info("分发到 {machine}", machine=machine.machine_id,
+                event="task_dispatched")
+```
+
+### 3.5 敏感信息脱敏 ★v1.2
+
+> 对应 ACTION-ITEM v2.1 A-127: 防止 API Key、Token 等敏感信息泄漏到日志
+
+#### 脱敏规则
+
+| 模式 | 正则 | 替换为 | 说明 |
+|------|------|--------|------|
+| API Key | `(api[_-]?key\s*[:=]\s*)(["']?)[A-Za-z0-9\-_]{8,}\2` | `\1\2***MASKED***\2` | 匹配 api_key=xxx 格式 |
+| Bearer Token | `(Bearer\s+)[A-Za-z0-9\-_.]+` | `\1***MASKED***` | HTTP Authorization 头 |
+| SSH 密钥路径 | `(/[\w./]+/\.ssh/[\w.]+)` | `***SSH_KEY_PATH***` | 禁止暴露密钥文件位置 |
+| access_token | `(access[_-]?token\s*[:=]\s*)(["']?)[A-Za-z0-9\-_]{8,}\2` | `\1\2***MASKED***\2` | OAuth/Webhook token |
+| 钉钉 Secret | `(SEC[a-f0-9]{32,})` | `SEC***MASKED***` | 钉钉签名密钥 |
+
+#### 实现设计
+
+```python
+import re
+
+class LogSanitizer:
+    """日志敏感信息脱敏过滤器"""
+    
+    PATTERNS = [
+        (re.compile(r'(api[_-]?key\s*[:=]\s*["\']?)[A-Za-z0-9\-_]{8,}', re.I),
+         r'\1***MASKED***'),
+        (re.compile(r'(Bearer\s+)[A-Za-z0-9\-_.]+', re.I),
+         r'\1***MASKED***'),
+        (re.compile(r'(access[_-]?token\s*[:=]\s*["\']?)[A-Za-z0-9\-_]{8,}', re.I),
+         r'\1***MASKED***'),
+        (re.compile(r'SEC[a-f0-9]{32,}'),
+         'SEC***MASKED***'),
+    ]
+    
+    @classmethod
+    def sanitize(cls, message: str) -> str:
+        for pattern, replacement in cls.PATTERNS:
+            message = pattern.sub(replacement, message)
+        return message
+```
+
+**集成方式**: 作为 `logging.Filter` 注入到根 Logger，所有模块日志自动过滤:
+```python
+class SanitizeFilter(logging.Filter):
+    def filter(self, record):
+        record.msg = LogSanitizer.sanitize(str(record.msg))
+        return True
+```
+
+**适用范围**:
+- 所有 `orchestrator.*` Logger 的 Handler 均安装此 Filter
+- 特别关注: Dispatcher SSH 脚本构建 (含 API Key)、Reporter 钉钉 Webhook (含 Secret)
+- LLM 审计日志 (DD-MOD-001 §2.5a) 的 prompt_preview 也经过脱敏
 
 ---
 
@@ -249,7 +390,11 @@ logging.basicConfig(
 - 3 级 JSON 回退: 直接解析 → ` ```json``` ` 块 → `[` 到 `]` 搜索
 - 超时: httpx timeout 10s~30s
 
-### 4.2 抽象层设计 (待实现)
+### 4.2 抽象层设计 ★v1.2
+
+> 对应 ACTION-ITEM v1.0 A-017: 核心模块 Protocol/ABC 接口定义
+
+#### LLMProvider ABC
 
 ```
 ┌─────────────────────────────────────────┐
@@ -270,6 +415,8 @@ logging.basicConfig(
 **推荐接口设计**:
 
 ```python
+from abc import ABC, abstractmethod
+
 class LLMProvider(ABC):
     """LLM 提供者抽象基类"""
 
@@ -302,6 +449,155 @@ class LLMProvider(ABC):
         # Level 3: 查找 [ 到 ] 或 { 到 }
         ...
 ```
+
+#### DispatcherProtocol
+
+```python
+from typing import Protocol, runtime_checkable
+
+@runtime_checkable
+class DispatcherProtocol(Protocol):
+    """任务分发器协议 — Orchestrator 依赖此协议而非 Dispatcher 具体实现"""
+    
+    async def dispatch_task(self, task: CodingTask) -> TaskResult: ...
+    async def dispatch_batch(self, tasks: list[CodingTask]) -> list[TaskResult]: ...
+```
+
+#### ReviewerProtocol
+
+```python
+@runtime_checkable
+class ReviewerProtocol(Protocol):
+    """代码审查器协议 — 支持替换为不同审查策略"""
+    
+    async def review_task(self, task: CodingTask, result: TaskResult) -> ReviewResult: ...
+```
+
+#### TestRunnerProtocol
+
+```python
+@runtime_checkable
+class TestRunnerProtocol(Protocol):
+    """测试执行器协议"""
+    
+    async def run_tests(self, task: CodingTask, result: TaskResult) -> TestResult: ...
+```
+
+#### ReporterProtocol
+
+```python
+@runtime_checkable
+class ReporterProtocol(Protocol):
+    """报告与通知协议"""
+    
+    async def notify_sprint_start(self, sprint_id: str, task_count: int) -> None: ...
+    async def notify_task_result(self, task: CodingTask, passed: bool) -> None: ...
+    async def save_sprint_report(self, results: dict) -> str: ...
+```
+
+**Protocol vs ABC 选择**:
+
+| 维度 | Protocol (推荐) | ABC |
+|------|---------|-----|
+| 注册方式 | 结构化子类型 ("鸭子类型") | 显式继承 |
+| 运行时检查 | `isinstance()` (需 `@runtime_checkable`) | `isinstance()` |
+| 依赖方向 | 消费方定义, 提供方无需感知 | 提供方必须显式继承 |
+| 适用场景 | Orchestrator ↔ 各模块的松耦合 | LLMProvider 需共享默认实现 |
+
+**设计决策**: 
+- **LLMProvider** 使用 ABC (需共享 `call_json` / `_extract_json` 默认实现)
+- **Dispatcher/Reviewer/TestRunner/Reporter** 使用 Protocol (松耦合, 便于测试 mock)
+
+### 4.5 LLM 速率限制 (Token Bucket) ★v1.2
+
+> 对应 ACTION-ITEM v1.0 A-020: 防止并发 LLM 调用超过 API 限额
+
+#### 设计背景
+
+DocAnalyzer (1 次/Sprint) 和 AutoReviewer (2 次/任务 × 并发数) 共享同一 LLM API Key。当 `max_concurrent=5` 时，最坏情况下可能有 10+ 并发 LLM 请求，触发 429 速率限制。
+
+#### Token Bucket 算法
+
+```python
+import asyncio
+import time
+
+class TokenBucketRateLimiter:
+    """
+    令牌桶限速器 — 控制 LLM API 调用频率。
+    线程安全 (基于 asyncio.Lock)。
+    """
+    
+    def __init__(self, rate: float = 10.0, burst: int = 15):
+        """
+        Args:
+            rate:  每秒补充令牌数 (对应 API RPM/60)
+            burst: 桶容量 (允许瞬时突发)
+        """
+        self._rate = rate
+        self._burst = burst
+        self._tokens = float(burst)
+        self._last_refill = time.monotonic()
+        self._lock = asyncio.Lock()
+    
+    async def acquire(self, tokens: int = 1) -> float:
+        """
+        获取令牌。如果令牌不足，等待直到有足够令牌。
+        返回实际等待时间 (秒)。
+        """
+        async with self._lock:
+            self._refill()
+            
+            if self._tokens >= tokens:
+                self._tokens -= tokens
+                return 0.0
+            
+            # 计算等待时间
+            deficit = tokens - self._tokens
+            wait_time = deficit / self._rate
+            self._tokens = 0
+        
+        # 在锁外等待 (不阻塞其他协程查询令牌)
+        await asyncio.sleep(wait_time)
+        
+        async with self._lock:
+            self._refill()
+            self._tokens -= tokens
+        
+        return wait_time
+    
+    def _refill(self):
+        now = time.monotonic()
+        elapsed = now - self._last_refill
+        self._tokens = min(self._burst, self._tokens + elapsed * self._rate)
+        self._last_refill = now
+```
+
+#### 配置
+
+```yaml
+# config.yaml
+llm:
+  rate_limit:
+    enabled: true             # 默认 false
+    requests_per_second: 10   # 每秒最大请求数 (对应 RPM 600)
+    burst: 15                 # 突发容量
+```
+
+#### 集成位置
+
+Token Bucket 实例在 Config 加载时创建，通过 LLMProvider 的 `call()` 方法自动 `acquire()`:
+
+```
+DocAnalyzer._call_llm()    ──┐
+                              ├── LLMProvider.call() → rate_limiter.acquire() → HTTP POST
+AutoReviewer._call_llm()   ──┘
+```
+
+**与重试策略 (§4.4) 的配合**: 
+- `acquire()` 在发送 HTTP 请求**之前**执行
+- 如果收到 429 响应，重试逻辑 (ALG-005) 仍然生效，但 Token Bucket 会自然降低后续请求频率
+- 429 的 `Retry-After` 头不会覆盖 Token Bucket 的等待时间 — 两者取 max
 
 ### 4.3 共享参数对比
 
@@ -580,9 +876,149 @@ with self._lock:
 
 ---
 
+## §9 可观测性与监控 ★v1.2
+
+> 对应 ACTION-ITEM v2.1 A-123 / v2.0 A-012 / v1.0 A-021: Prometheus 监控指标
+
+### 9.1 指标体系设计
+
+采用 Prometheus 指标规范 (prometheus_client)，通过内嵌 HTTP `/metrics` 端点暴露。
+
+#### Counter (计数器)
+
+| 指标名 | 标签 | 说明 |
+|--------|------|------|
+| `autodev_tasks_total` | `status={passed,failed,escalated,retry}` | 任务数统计 |
+| `autodev_llm_calls_total` | `module={doc_analyzer,reviewer_l2,reviewer_l3}`, `status={success,retry,error}` | LLM 调用次数 |
+| `autodev_ssh_commands_total` | `machine_id`, `status={success,timeout,error}` | SSH 执行次数 |
+| `autodev_git_pushes_total` | `machine_id`, `status={success,conflict,error}` | Git push 次数 |
+| `autodev_reviews_total` | `layer={L1,L2,L3}`, `result={pass,fail,degraded}` | 审查结果统计 |
+
+#### Histogram (直方图)
+
+| 指标名 | 标签 | Buckets | 说明 |
+|--------|------|---------|------|
+| `autodev_task_duration_seconds` | `status` | 30, 60, 120, 300, 600, 1200 | 任务执行耗时 |
+| `autodev_llm_latency_seconds` | `module` | 1, 2, 5, 10, 30, 60, 120 | LLM 响应延迟 |
+| `autodev_review_score` | `layer` | 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0 | 审查评分分布 |
+
+#### Gauge (仪表盘)
+
+| 指标名 | 标签 | 说明 |
+|--------|------|------|
+| `autodev_machines_status` | `machine_id`, `status={online,busy,offline,error}` | 机器状态 |
+| `autodev_active_tasks` | — | 当前并行执行中的任务数 |
+| `autodev_queue_size` | — | 等待分发的任务队列深度 |
+| `autodev_sprint_progress_ratio` | — | Sprint 完成比 (0.0~1.0) |
+
+### 9.2 Metrics 端点
+
+```python
+from prometheus_client import start_http_server, Counter, Histogram, Gauge
+
+# 在 Orchestrator 启动时暴露
+start_http_server(port=config.get("metrics.port", 9090))
+```
+
+**配置**:
+```yaml
+# config.yaml
+metrics:
+  enabled: true             # 默认 false, 需显式开启
+  port: 9090                # Prometheus scrape 端口
+  path: "/metrics"          # 端点路径
+```
+
+### 9.3 告警规则建议 (Grafana / Alertmanager)
+
+| 告警规则 | 条件 | 严重级别 |
+|---------|------|---------|
+| LLM 错误率过高 | `rate(autodev_llm_calls_total{status="error"}[5m]) > 0.3` | WARNING |
+| 任务超时率过高 | `rate(autodev_ssh_commands_total{status="timeout"}[10m]) > 0.2` | WARNING |
+| 所有机器离线 | `autodev_machines_status{status="online"} == 0` | CRITICAL |
+| Sprint 进度停滞 | `autodev_sprint_progress_ratio` 30min 无变化 | WARNING |
+| Git push 冲突频繁 | `rate(autodev_git_pushes_total{status="conflict"}[10m]) > 0.5` | WARNING |
+
+---
+
+## §10 状态持久化层 ★v1.2
+
+> 对应 ACTION-ITEM: v1.0 A-016 — "实现状态持久化层 (基于 A-006 选型)"
+> 详细快照设计见: DD-MOD-004 §4.2 (ALG-009b 保存 / ALG-009c 恢复)
+
+### 10.1 持久化架构总览
+
+```
+┌─────────────────────────────────────────────┐
+│              TaskEngine (MOD-004)            │
+│                                              │
+│  状态变更 → _save_snapshot() ─┐              │
+│  启动恢复 ← _load_snapshot() ←┤              │
+│                                │              │
+│  ┌─────────────────────────────▼────────┐    │
+│  │     PersistenceAdapter (接口)         │    │
+│  │  save(snapshot: dict) → None         │    │
+│  │  load() → Optional[dict]            │    │
+│  └──────┬───────────────┬───────────────┘    │
+│         │               │                    │
+│  ┌──────▼─────┐  ┌──────▼──────┐             │
+│  │ JSONFile   │  │  SQLite     │             │
+│  │ Adapter    │  │  Adapter    │             │
+│  │ (Phase 1)  │  │  (Phase 2)  │             │
+│  └────────────┘  └─────────────┘             │
+└──────────────────────────────────────────────┘
+```
+
+### 10.2 Phase 1: JSON 文件持久化 (当前)
+
+| 属性 | 说明 |
+|------|------|
+| **存储格式** | 单文件 JSON ({reports_dir}/state_snapshot.json) |
+| **写入时机** | 每次任务状态变更 (StateMachine callback) |
+| **读取时机** | TaskEngine.__init__ / Orchestrator 启动 |
+| **原子写入** | 先写 `.tmp` → `os.replace()` 原子重命名 |
+| **容量上限** | ≤100 任务 (单文件约 50KB) |
+| **恢复策略** | 启动时自动检测并加载；DISPATCHED 状态任务标记为 RETRY |
+| **详细算法** | DD-MOD-004 ALG-009b (保存), ALG-009c (恢复) |
+
+### 10.3 快照一致性保障
+
+| 机制 | 说明 |
+|------|------|
+| 原子写 | `write → .tmp` → `os.replace()` 避免半写损坏 |
+| 版本号 | `"version": "1.0"` 兼容性检查 |
+| 校验和 | 恢复时检查 JSON parse 是否成功 |
+| 降级 | 快照损坏 → 日志 WARNING → 全新 Sprint (不恢复) |
+| 线程安全 | 写入在 `_lock` 保护下进行 (DD-MOD-004 §2) |
+
+### 10.4 Phase 2 演进: SQLite (P3 规划)
+
+> 当任务数 > 100 或需要支持多 Sprint 历史查询时迁移
+
+| 属性 | 说明 |
+|------|------|
+| **存储** | `{reports_dir}/autodev.db` (SQLite 3) |
+| **表设计** | `sprints`, `tasks`, `task_results`, `review_results` |
+| **写入** | WAL 模式，单写多读 |
+| **迁移** | 自动检测 JSON→SQLite 迁移 |
+| **查询** | 支持历史 Sprint 对比、任务统计 |
+| **触发条件** | `config.persistence.backend: "sqlite"` |
+
+### 10.5 设计决策
+
+| 决策 | 选择 | 备选 | 理由 |
+|------|------|------|------|
+| Phase 1 存储 | JSON 文件 | SQLite, Redis | 零依赖、人可读、调试友好 |
+| 写入频率 | 每次状态变更 | 批量 / 定时 | 状态变更频率低 (秒级)，IO 开销可忽略 |
+| 原子性 | os.replace | fsync + rename | Python os.replace 在 POSIX 上原子 |
+| 恢复策略 | DISPATCHED→RETRY | 全量重放 | 简单可靠，远程可能已产出代码 |
+
+---
+
 ## 变更记录
 
 | 版本 | 日期 | 变更内容 | 作者 |
 |------|------|---------|------|
 | v1.0 | 2026-03-07 | 创建: 异常体系、日志规范、LLM 抽象、全局序列图、配置映射、并发模型、依赖清单 | AutoDev Pipeline |
 | v1.1 | 2026-03-07 | SEQ-001~003 重命名为 SEQ-SYS-001~003，消除与模块级 SEQ 编号碰撞 | AutoDev Pipeline |
+| v1.2 | 2026-03-07 | §3.4 JSON 结构化日志完整设计 (A-122); §3.5 敏感信息脱敏 (A-127); §4.2 Protocol/ABC 接口定义 (A-017); §4.5 Token Bucket 速率限制 (A-020); §9 Prometheus 监控指标 (A-123); §10 状态持久化层架构 (A-016) | AutoDev Pipeline |

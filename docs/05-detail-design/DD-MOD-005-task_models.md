@@ -4,7 +4,7 @@
 > **版本**: v1.0  
 > **状态**: 正式  
 > **更新日期**: 2026-03-07  
-> **对应源码**: `orchestrator/task_models.py` (202 行)  
+> **对应源码**: `orchestrator/task_models.py` (201 行)  
 > **上游文档**: [OD-MOD-005](../04-outline-design/OD-MOD-005-task_models.md) · [DD-SYS-001](DD-SYS-001-系统详细设计.md) · [OD-002](../04-outline-design/OD-002-数据模型设计.md)  
 > **下游文档**: 被全部模块依赖
 
@@ -102,7 +102,61 @@
 | `started_at` | `Optional[float]` | `None` | 时间戳 | 开始执行时间 |
 | `finished_at` | `Optional[float]` | `None` | 时间戳 | 完成时间 |
 
-### 3.2 计算属性
+### 3.2 `__post_init__` 输入校验 ★v1.2
+
+> 对应 ACTION-ITEM v2.1 A-120: 防止恶意/畸形字段值注入
+
+CodingTask 作为 LLM 输出直接构造的数据对象，必须在创建时校验关键字段，防止路径遍历、命令注入等安全风险。
+
+```python
+import re
+
+# 字符白名单: 字母、数字、下划线、短横、斜杠、点号
+_SAFE_ID_RE = re.compile(r'^[a-zA-Z0-9_\-/.]+$')
+
+@dataclass
+class CodingTask:
+    # ... (字段定义见 §3.1)
+    
+    def __post_init__(self):
+        """创建时自动校验关键字段"""
+        # 1. task_id 格式校验
+        if not self.task_id or not _SAFE_ID_RE.match(self.task_id):
+            raise ValueError(
+                f"task_id 包含非法字符: '{self.task_id}' "
+                f"(允许: a-z A-Z 0-9 _ - / .)")
+        
+        # 2. target_dir 路径安全校验
+        if self.target_dir:
+            if not _SAFE_ID_RE.match(self.target_dir):
+                raise ValueError(
+                    f"target_dir 包含非法字符: '{self.target_dir}'")
+            # 禁止路径遍历
+            if '..' in self.target_dir:
+                raise ValueError(
+                    f"target_dir 禁止路径遍历 (..): '{self.target_dir}'")
+        
+        # 3. depends_on 引用校验
+        for dep_id in self.depends_on:
+            if not _SAFE_ID_RE.match(dep_id):
+                raise ValueError(
+                    f"depends_on 包含非法 task_id: '{dep_id}'")
+```
+
+**校验规则汇总**:
+
+| 字段 | 正则 / 规则 | 失败行为 | 安全目的 |
+|------|------------|---------|---------|
+| `task_id` | `^[a-zA-Z0-9_\-/.]+$` + 非空 | `ValueError` | 防止命令注入 |
+| `target_dir` | 同上 + 禁止 `..` | `ValueError` | 防止路径遍历 |
+| `depends_on[*]` | 同 task_id 正则 | `ValueError` | 防止伪造依赖引用 |
+
+**设计决策**:
+- 选择白名单 (允许字符) 而非黑名单 (禁止字符)，更安全
+- `__post_init__` 在 dataclass 构造时自动调用，无需调用方显式校验
+- 从 `_parse_tasks_from_llm` (DD-MOD-001 §2.6) 构造时即触发，拦截 LLM 的畸形输出
+
+### 3.3 计算属性
 
 | 属性 | 返回类型 | 算法 |
 |------|---------|------|
@@ -221,3 +275,4 @@ function from_dict(d):
 | 版本 | 日期 | 变更内容 |
 |------|------|---------|
 | v1.0 | 2026-03-07 | 从 DD-001 §5 提取并扩充，形成独立模块详述 |
+| v1.2 | 2026-03-07 | 新增 §3.2 `__post_init__` 输入校验 (task_id/target_dir/depends_on 白名单) |

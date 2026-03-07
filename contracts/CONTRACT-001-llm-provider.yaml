@@ -1,0 +1,153 @@
+# =====================================================
+# 接口契约: LLM Provider
+# 文档编号: CONTRACT-001
+# 对应文档: DD-SYS-001 §4.2 (LLMProvider ABC)
+#           OD-003 §2.1 (LLM API)
+# ACTION-ITEM: v2.1 A-124
+# =====================================================
+
+contract:
+  id: CONTRACT-001
+  name: LLMProvider
+  version: "1.0"
+  type: abstract_base_class
+  module: orchestrator.llm_provider  # 建议实现位置
+  description: >
+    LLM 调用的统一抽象层。所有需要调用大模型的模块
+    (doc_analyzer, reviewer) 均通过此接口进行，
+    确保可替换、可测试、可限流。
+
+# ─── 方法定义 ──────────────────────────────────────
+methods:
+
+  - name: call
+    async: true
+    description: "通用 LLM 聊天补全调用"
+    parameters:
+      - name: messages
+        type: "List[Dict[str, str]]"
+        required: true
+        description: "OpenAI 格式消息列表 [{role, content}]"
+      - name: temperature
+        type: float
+        required: false
+        default: 0.2
+        description: "采样温度"
+      - name: max_tokens
+        type: int
+        required: false
+        default: 4096
+        description: "最大返回 token 数"
+    returns:
+      type: str
+      description: "LLM 返回的文本内容 (choices[0].message.content)"
+    raises:
+      - type: LLMConnectionError
+        code: ERR-009
+        condition: "API 连接失败 (网络、DNS、超时)"
+      - type: LLMResponseError
+        code: ERR-010
+        condition: "HTTP 状态码非 2xx 或响应体格式异常"
+      - type: LLMRateLimitError
+        code: ERR-026
+        condition: "HTTP 429, 触发速率限制"
+    retry:
+      strategy: exponential_backoff
+      max_retries: 3
+      base_delay_sec: 2
+      reference: "DD-MOD-001 ALG-005"
+
+  - name: call_json
+    async: true
+    description: "LLM 调用 + 自动 JSON 解析"
+    parameters:
+      - name: messages
+        type: "List[Dict[str, str]]"
+        required: true
+      - name: temperature
+        type: float
+        required: false
+        default: 0.2
+    returns:
+      type: "Dict[str, Any]"
+      description: "解析后的 JSON 对象"
+    raises:
+      - type: LLMResponseError
+        code: ERR-010
+        condition: "返回内容无法解析为 JSON"
+    implementation_notes: >
+      内部调用 call() → _extract_json() → json.loads()
+      如果第一次解析失败，尝试从 markdown fence 中提取
+
+  - name: _extract_json
+    async: false
+    visibility: protected
+    description: "从 LLM 原始返回中提取 JSON 子串"
+    parameters:
+      - name: raw_text
+        type: str
+        required: true
+    returns:
+      type: str
+      description: "清理后的 JSON 字符串"
+    implementation_notes: >
+      处理策略: 
+      1. 直接 json.loads 尝试
+      2. 查找 ```json ... ``` fence
+      3. 查找第一个 { 到最后一个 } 的子串
+      对应算法: DD-MOD-001 ALG-004
+
+# ─── 配置项 ──────────────────────────────────────
+config:
+  section: "llm"
+  fields:
+    - key: llm.base_url
+      type: str
+      required: true
+      env_var: OPENAI_API_BASE
+      description: "LLM API 基础 URL"
+    - key: llm.api_key
+      type: str
+      required: true
+      env_var: OPENAI_API_KEY
+      sensitive: true
+      description: "LLM API 密钥 (日志中必须脱敏)"
+    - key: llm.model
+      type: str
+      default: "openai/claude-opus-4-6"
+      description: "默认模型名称"
+    - key: llm.timeout
+      type: int
+      default: 120
+      unit: seconds
+      description: "单次调用超时"
+    - key: llm.doc_max_len
+      type: int
+      default: 6000
+      description: "文档最大字符数 (ALG-003 智能截断)"
+    - key: llm.rate_limit.requests_per_second
+      type: float
+      default: 5.0
+      description: "令牌桶速率 (DD-SYS-001 §4.5)"
+    - key: llm.rate_limit.burst
+      type: int
+      default: 10
+      description: "令牌桶突发容量"
+
+# ─── 审计要求 ──────────────────────────────────────
+audit:
+  enabled: true
+  storage: "logs/llm_audit/{date}/{timestamp}_{module}_{req|resp}.json"
+  reference: "DD-MOD-001 §2.5a"
+  fields:
+    request: [timestamp, module, model, messages_hash, token_count]
+    response: [timestamp, module, model, content_hash, token_count, latency_ms]
+
+# ─── 质量门禁 ──────────────────────────────────────
+quality_gates:
+  - name: "单元测试覆盖"
+    requirement: "mock LLM 返回，验证 call/call_json/retry 路径"
+    level: L2
+  - name: "集成测试"
+    requirement: "真实 LLM API 调用，验证 JSON 解析链路"
+    level: L3

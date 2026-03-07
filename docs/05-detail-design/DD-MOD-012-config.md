@@ -4,7 +4,7 @@
 > **版本**: v1.0  
 > **状态**: 正式  
 > **更新日期**: 2026-03-07  
-> **对应源码**: `orchestrator/config.py` (235 行)  
+> **对应源码**: `orchestrator/config.py` (234 行)  
 > **上游文档**: [OD-MOD-012](../04-outline-design/OD-MOD-012-config.md) · [DD-SYS-001](DD-SYS-001-系统详细设计.md)  
 > **下游文档**: [TEST-001](../07-testing/TEST-001-测试策略与方案.md)
 
@@ -293,6 +293,7 @@ task:
   test_timeout: 300
   review_threshold: 3.5
   pass_threshold: 0.8
+  aider_version: "0.82.1"       # ★v1.2: 锁定 aider 版本 (A-121)
 
 # ======== 机器列表 (v3) ========
 machines:
@@ -339,6 +340,7 @@ logging:
 | `review_threshold` | `task.review_threshold` | float | `3.5` |
 | `pass_threshold` | `task.pass_threshold` | float | `0.8` |
 | `log_level` | `logging.level` | str | `"INFO"` |
+| `aider_version` | `task.aider_version` | str | `""` (不校验) |
 
 ---
 
@@ -348,3 +350,4 @@ logging:
 |------|------|---------|
 | v1.0 | 2026-03-07 | 从 DD-001 §12 提取并扩充，含完整 Schema 与属性映射 |
 | v1.1 | 2026-03-07 | 新增 ALG-025a Schema 校验; 增加 ConfigSchemaError (ERR-025) |
+| v1.2 | 2026-03-07 | 新增 `aider_version` 配置项; @property 映射 (A-121) |

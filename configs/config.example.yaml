@@ -1,0 +1,96 @@
+# ============================================================
+# AutoDev Pipeline — 示例配置
+# 用法: cp configs/config.example.yaml orchestrator/config.yaml
+# ============================================================
+
+orchestrator:
+  mode: sprint
+  current_sprint: 1
+  poll_interval: 10
+  max_concurrent: 4
+  port: 9500
+
+project:
+  name: your-project
+  path: /absolute/path/to/your-project
+  repo_url: git@github.com:your-org/your-project.git
+  branch: main
+
+doc_set:
+  requirements: "docs/*需求*.md"
+  design: "docs/*设计*.md"
+  task_card: "docs/*Sprint*任务卡*.md"
+  test_plan: "docs/*测试*.md"
+  dev_plan: "docs/*开发计划*.md"
+  risk: "docs/*风险*.md"
+  pipeline: "docs/*流水线*.md"
+
+llm:
+  openai_api_base: ${OPENAI_API_BASE}
+  openai_api_key: ${OPENAI_API_KEY}
+  model: ${AIDER_MODEL}
+  timeout: 600
+  max_tokens: 8192
+
+machines:
+  - machine_id: orchestrator
+    display_name: "Orchestrator"
+    host: 127.0.0.1
+    port: 22
+    user: $USER
+    work_dir: /absolute/path/to/your-project
+    tags: [python, orchestrator, testing]
+    aider_prefix: 'export PATH="$HOME/.local/bin:$PATH"'
+
+  - machine_id: worker-1
+    display_name: "Worker 1"
+    host: 192.168.1.101
+    port: 22
+    user: dev
+    work_dir: /absolute/path/to/your-project
+    tags: [python, backend, linux]
+    aider_prefix: 'export PATH="$HOME/.local/bin:$PATH"'
+
+task:
+  max_retries: 3
+  single_task_timeout: 600
+  concurrent_limit: 4
+
+git:
+  branch: main
+  bare_repo: ""
+  auto_tag_on_sprint_end: true
+
+testing:
+  run_on: orchestrator
+  pytest_args: "-v --tb=short --continue-on-collection-errors"
+  pass_threshold: 4.0
+  test_pass_rate_threshold: 0.8
+  report_dir: reports/
+
+notification:
+  dingtalk_webhook: ${DINGTALK_WEBHOOK_URL}
+  dingtalk_webhook_secret: ${DINGTALK_WEBHOOK_SECRET}
+  dingtalk_app_key: ${DINGTALK_APP_KEY}
+  dingtalk_app_secret: ${DINGTALK_APP_SECRET}
+  dingtalk_robot_code: ""
+  dingtalk_conversation_id: ""
+  at_mobiles: []
+  at_all: false
+  notify_on:
+    - sprint_start
+    - sprint_end
+    - task_escalated
+    - daily_summary
+  daily_summary_time: "18:00"
+
+acceptance:
+  enabled: true
+  run_on_sprint_end: true
+  env_var: RUN_ACCEPTANCE
+
+paths:
+  task_card: "docs/07-Sprint任务卡.md"
+  design_doc: "docs/04-系统概要设计.md"
+  contracts_dir: contracts/
+  log_dir: logs/

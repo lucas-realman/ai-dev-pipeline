@@ -24,5 +24,7 @@ Thumbs.db
 # Project
 reports/*.md
 reports/*.json
+!reports/TEST-REPORT-v3.0.0.md
 logs/
 *.log
+.coverage

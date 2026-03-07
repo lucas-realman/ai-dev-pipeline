@@ -1,10 +1,10 @@
 # TRACE-001 — 全局追溯矩阵
 
 > **文档编号**: TRACE-001  
-> **版本**: v1.0  
-> **状态**: 草稿  
-> **更新日期**: 2026-03-06  
-> **说明**: 本文档是全系统 ID 追溯的唯一权威来源，覆盖 FR → SYS → ARCH → MOD → IF → DM → TC 全链路。
+> **版本**: v1.2  
+> **状态**: 正式  
+> **更新日期**: 2026-03-07  
+> **说明**: 本文档是全系统 ID 追溯的唯一权威来源，覆盖 FR → SYS → ARCH → MOD → DD → IF → DM → TC 全链路。
 
 ---
 
@@ -38,23 +38,23 @@
 
 ---
 
-## §2 反向追溯：模块 → 需求
+## §2 反向追溯：模块 → 需求 → 详细设计
 
-| MOD 编号 | 模块名 | 覆盖 FR | IF | TC 总数 |
-|---------|--------|--------|-----|--------|
-| MOD-001 | doc_analyzer | FR-001,002,003 | IF-001,002 | 4 |
-| MOD-002 | doc_parser | FR-001 | — | 1 (TC-050 间接) |
-| MOD-003 | machine_registry | FR-004,005 | IF-005 | 5 |
-| MOD-004 | task_engine | FR-006,007 | IF-003,004 | 4 |
-| MOD-005 | task_models | FR-003,014 | — | 3 |
-| MOD-006 | dispatcher | FR-008 | IF-006,007 | 4 |
-| MOD-007 | reviewer | FR-009,010,011 | IF-008 | 4 |
-| MOD-008 | test_runner | FR-012,013 | IF-009 | 4 |
-| MOD-009 | state_machine | FR-014,015 | IF-010 | 6 |
-| MOD-010 | reporter | FR-016,017,018,022,023 | IF-011 | 4 |
-| MOD-011 | git_ops | FR-019,020,021 | IF-012 | 3 |
-| MOD-012 | config | CON-001 | — | 4 |
-| MOD-013 | main | — (入口编排) | — | 1 |
+| MOD 编号 | 模块名 | 覆盖 FR | IF | DD 文档 | ALG 范围 | SEQ | TC 总数 |
+|---------|--------|--------|-----|---------|---------|-----|--------|
+| MOD-001 | doc_analyzer | FR-001,002,003 | IF-001,002 | DD-MOD-001 | ALG-001~004 | SEQ-001 | 4 |
+| MOD-002 | doc_parser | FR-001 | — | DD-MOD-002 | ALG-005~007 | SEQ-002 | 1 |
+| MOD-003 | machine_registry | FR-004,005 | IF-005 | DD-MOD-003 | ALG-008 | SEQ-003 | 5 |
+| MOD-004 | task_engine | FR-006,007 | IF-003,004 | DD-MOD-004 | ALG-009~011 | SEQ-004 | 4 |
+| MOD-005 | task_models | FR-003,014 | — | DD-MOD-005 | — | — | 3 |
+| MOD-006 | dispatcher | FR-008 | IF-006,007 | DD-MOD-007 | ALG-013~014 | SEQ-007 | 4 |
+| MOD-007 | reviewer | FR-009,010,011 | IF-008 | DD-MOD-008 | ALG-015~016 | SEQ-008 | 4 |
+| MOD-008 | test_runner | FR-012,013 | IF-009 | DD-MOD-009 | ALG-017~020 | SEQ-009 | 4 |
+| MOD-009 | state_machine | FR-014,015 | IF-010 | DD-MOD-006 | ALG-012 | SEQ-005,006 | 6 |
+| MOD-010 | reporter | FR-016,017,018,022,023 | IF-011 | DD-MOD-010 | ALG-021~022 | SEQ-010 | 4 |
+| MOD-011 | git_ops | FR-019,020,021 | IF-012 | DD-MOD-011 | ALG-023~024 | SEQ-011 | 3 |
+| MOD-012 | config | CON-001 | — | DD-MOD-012 | ALG-025~027 | — | 4 |
+| MOD-013 | main | — (入口编排) | — | DD-MOD-013 | ALG-028~031 | SEQ-012 | 1 |
 
 ---
 
@@ -107,6 +107,9 @@
 | 约束 (CON) | 11 | 7 (含 TC) + 4 (Review) | **100%** |
 | 内部接口 (IF) | 12 | 12 | **100%** |
 | 数据模型 (DM) | 8 | 6 (含 TC) + 2 (enum 隐含) | **100%** |
+| 详细设计 (DD) | 14 | 1 DD-SYS + 13 DD-MOD | **100%** |
+| 算法 (ALG) | 31 | 31 | **100%** |
+| 序列图 (SEQ) | 12 | 12 | **100%** |
 | 测试用例 (TC) | 45 | — | — |
 
 ---
@@ -124,7 +127,11 @@
 | MOD-001 ~ MOD-013 | 代码模块 | OD-001 映射表 |
 | DM-001 ~ DM-008 | 数据模型 | OD-002 映射表 |
 | IF-001 ~ IF-012 | 接口契约 | OD-001 §2.2 / OD-003 |
+| ALG-001 ~ ALG-031 | 算法描述 | DD-MOD-001~013 |
+| SEQ-001 ~ SEQ-012 | 序列图 | DD-MOD-001~013 |
 | TC-001 ~ TC-123 | 测试用例 | TEST-001 §2 |
+
+**追溯链**: FR → SYS → ARCH → MOD → DD → IF/DM → TC
 
 ---
 
@@ -134,3 +141,4 @@
 |------|------|---------|------|
 | v1.0 | 2026-03-06 | 初始版本：23 FR 全链路追溯 + NFR/CON 追溯 + 覆盖率统计 | AutoDev Pipeline |
 | v1.1 | 2026-03-06 | 修正: §1 正向追溯 8/13 MOD 编号与 OD-001 对齐, §2 反向追溯重建 (A-001) | AutoDev Pipeline |
+| v1.2 | 2026-03-07 | §2 扩展 DD/ALG/SEQ 列; §4 新增 DD/ALG/SEQ 覆盖; §5 新增 ALG/SEQ ID 范围 | AutoDev Pipeline |

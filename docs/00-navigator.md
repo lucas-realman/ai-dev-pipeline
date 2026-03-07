@@ -1,7 +1,7 @@
 # AutoDev Pipeline — 文档架构导航
 
-> **版本**: v2.1  
-> **更新日期**: 2026-03-06  
+> **版本**: v2.2  
+> **更新日期**: 2026-03-07  
 > **原则**: 文档是最重要的资产，所有设计先于编码，文档驱动开发  
 > **全局 ID 体系**: FR → SYS → ARCH → MOD → IF → DM → TC 全链路可追溯
 
@@ -26,12 +26,16 @@ docs/
 │   └── ✅ ARCH-002-部署架构.md                #    5 机拓扑 + 网络策略 + 容器化路线图
 │
 ├── 04-outline-design/                        # ④ 概要设计
-│   ├── ✅ OD-001-模块概要设计.md              #    13 MOD 清单 + IF-001~012 + FR↔MOD 映射
+│   ├── ✅ OD-001-模块概要设计.md              #    索引页 → OD-SYS-001 + OD-MOD-001~013
+│   ├── ✅ OD-SYS-001-系统概要设计.md          #    组件总览、分层架构、调用链、FR→MOD 映射
+│   ├── ✅ OD-MOD-001~013                      #    13 模块概要设计 (每模块一文件)
 │   ├── ✅ OD-002-数据模型设计.md              #    8 DM + 状态机 + 配置模型
 │   └── ✅ OD-003-接口契约设计.md              #    12 内部接口 + 3 外部 API + 错误约定
 │
 ├── 05-detail-design/                         # ⑤ 详细设计
-│   └── ◻ DD-001-详细设计说明书.md             #    13 MOD 详细设计 + 公共设计
+│   ├── ✅ DD-001-详细设计说明书.md             #    索引页 → DD-SYS-001 + DD-MOD-001~013
+│   ├── ✅ DD-SYS-001-系统详细设计.md          #    异常体系 + 日志规范 + LLM 抽象
+│   └── ✅ DD-MOD-001~013                      #    13 模块详细设计 (31 ALG + 12 SEQ)
 │
 ├── 06-traceability/                          # ⑥ 追溯矩阵
 │   └── ✅ TRACE-001-追溯矩阵.md              #    FR→SYS→ARCH→MOD→IF→DM→TC 全链路
@@ -80,10 +84,10 @@ docs/
 | 2 | [SYS-001](02-system-design/SYS-001-系统设计说明书.md) | 系统上下文 + 四层模型 + ADR | SYS-001~009, ADR-001~006 |
 | 3 | [ARCH-001](03-architecture/ARCH-001-架构总览.md) | 架构风格 + 组件 + 数据流 | ARCH-001~010 |
 | 4 | [ARCH-002](03-architecture/ARCH-002-部署架构.md) | 物理拓扑 + 网络 + 容器化 | — |
-| 5 | [OD-001](04-outline-design/OD-001-模块概要设计.md) | 13 模块 + 接口 + 映射 | MOD-001~013, IF-001~012 |
+| 5 | [OD-001](04-outline-design/OD-001-模块概要设计.md) | 索引页 → OD-SYS-001 + OD-MOD-001~013 | MOD-001~013, IF-001~012 |
 | 6 | [OD-002](04-outline-design/OD-002-数据模型设计.md) | 数据模型 + 状态机 + 配置 | DM-001~008 |
 | 7 | [OD-003](04-outline-design/OD-003-接口契约设计.md) | 接口签名 + 外部 API + 错误码 | IF-001~012 (详细契约) |
-| 8 | [DD-001](05-detail-design/DD-001-详细设计说明书.md) | 13 模块详细设计 + 公共设计 | DD-MOD-001~013 |
+| 8 | [DD-001](05-detail-design/DD-001-详细设计说明书.md) | 索引页 → DD-SYS-001 + DD-MOD-001~013 | ALG-001~031, SEQ-001~012 |
 | 9 | [TEST-001](07-testing/TEST-001-测试策略与方案.md) | 4 层测试 + 45 用例 + 自动化 | TC-001~123 |
 | 10 | [TRACE-001](06-traceability/TRACE-001-追溯矩阵.md) | 全链路追溯 + 覆盖率 | 全部 ID 交叉引用 |
 | 11 | [ITER-001](08-iteration/ITER-001-迭代计划.md) | 里程碑 + Sprint 节奏 | M0~M3 |
@@ -129,6 +133,8 @@ docs/
 | DM-001 ~ DM-008 | 数据模型 | OD-002 映射表 |
 | IF-001 ~ IF-012 | 接口契约 | OD-001 §2.2 / OD-003 |
 | TC-001 ~ TC-123 | 测试用例 | TEST-001 §2 |
+| ALG-001 ~ ALG-031 | 算法描述 | DD-MOD-001~013 |
+| SEQ-001 ~ SEQ-012 | 序列图 | DD-MOD-001~013 |
 | RISK-001 ~ RISK-007 | 风险项 | OPS-003 §1 |
 
 **追溯链**: FR → SYS → ARCH → MOD → IF/DM → TC
@@ -142,8 +148,8 @@ docs/
 | `REQ-` | 需求文档 | 01-requirements/ | REQ-001 |
 | `SYS-` | 系统设计 | 02-system-design/ | SYS-001 |
 | `ARCH-` | 架构设计 | 03-architecture/ | ARCH-001, ARCH-002 |
-| `OD-` | 概要设计 | 04-outline-design/ | OD-001, OD-002, OD-003 |
-| `DD-` | 详细设计 | 05-detail-design/ | DD-001 |
+| `OD-` | 概要设计 | 04-outline-design/ | OD-001, OD-SYS-001, OD-MOD-001~013 |
+| `DD-` | 详细设计 | 05-detail-design/ | DD-001, DD-SYS-001, DD-MOD-001~013 |
 | `TRACE-` | 追溯矩阵 | 06-traceability/ | TRACE-001 |
 | `TEST-` | 测试设计 | 07-testing/ | TEST-001 |
 | `ITER-` | 迭代计划 | 08-iteration/ | ITER-001 |

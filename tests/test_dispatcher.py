@@ -3,7 +3,6 @@ L2 组件测试 — SSH 分发器 (MOD-007)
 TC-060 ~ TC-063, 覆盖 FR-010 / FR-011 / ALG-013
 对齐 TEST-001 §2.2.7
 """
-import asyncio
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 

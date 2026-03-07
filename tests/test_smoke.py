@@ -6,7 +6,6 @@ import importlib
 
 import pytest
 
-
 # ═══════════════════════════════════════════════════════════
 #  导入 & 版本
 # ═══════════════════════════════════════════════════════════
@@ -174,7 +173,11 @@ def test_state_machine_transitions():
     """TaskStateMachine 完整 happy-path 流转"""
     from orchestrator.state_machine import TaskStateMachine
     from orchestrator.task_models import (
-        CodingTask, ReviewResult, TaskResult, TaskStatus, TestResult,
+        CodingTask,
+        ReviewResult,
+        TaskResult,
+        TaskStatus,
+        TestResult,
     )
 
     task = CodingTask(task_id="T-002", description="sm test", target_dir="src")
@@ -217,7 +220,7 @@ def test_state_machine_transitions():
 @pytest.mark.smoke
 def test_state_machine_illegal_transition():
     """非法状态转换抛出 StateMachineError"""
-    from orchestrator.state_machine import TaskStateMachine, StateMachineError
+    from orchestrator.state_machine import StateMachineError, TaskStateMachine
     from orchestrator.task_models import CodingTask
 
     task = CodingTask(task_id="T-003", description="illegal test")
@@ -233,7 +236,10 @@ def test_state_machine_retry_flow():
     """Review 失败 → RETRY → 重新排队"""
     from orchestrator.state_machine import TaskStateMachine
     from orchestrator.task_models import (
-        CodingTask, ReviewResult, TaskResult, TaskStatus,
+        CodingTask,
+        ReviewResult,
+        TaskResult,
+        TaskStatus,
     )
 
     task = CodingTask(task_id="T-004", description="retry test")
@@ -305,7 +311,7 @@ def test_task_engine_add_task_alias():
 @pytest.mark.smoke
 def test_task_engine_cycle_detection():
     """检测循环依赖 (ALG-009)"""
-    from orchestrator.task_engine import TaskEngine, CycleDependencyError
+    from orchestrator.task_engine import CycleDependencyError, TaskEngine
     from orchestrator.task_models import CodingTask
 
     engine = TaskEngine()

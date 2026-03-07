@@ -11,7 +11,6 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-
 # ── 字符白名单 (§3.2 __post_init__ 校验) ──
 
 _SAFE_ID_RE = re.compile(r'^[a-zA-Z0-9_\-/.]+$')

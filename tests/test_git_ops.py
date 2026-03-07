@@ -3,7 +3,6 @@ L2 组件测试 — Git 操作 (MOD-011)
 TC-100 ~ TC-102, 覆盖 FR-022 / ALG-027
 对齐 TEST-001 §2.2.11
 """
-import asyncio
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 

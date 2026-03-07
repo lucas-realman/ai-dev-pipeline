@@ -12,14 +12,10 @@ L4 验收测试 — test_acceptance.py
 from __future__ import annotations
 
 import asyncio
-import importlib
 import json
-import os
 import re
-import subprocess
 import time
 from pathlib import Path
-from typing import Dict, List
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -27,24 +23,20 @@ import pytest
 from orchestrator.config import Config
 from orchestrator.dashboard import app as dashboard_app
 from orchestrator.dispatcher import Dispatcher
-from orchestrator.log_config import JsonFormatter, StandardFormatter, setup_logging
+from orchestrator.log_config import JsonFormatter, StandardFormatter
 from orchestrator.machine_registry import MachineRegistry
 from orchestrator.main import Orchestrator
 from orchestrator.reporter import Reporter
-from orchestrator.reviewer import AutoReviewer
-from orchestrator.state_machine import TaskStateMachine
 from orchestrator.task_engine import TaskEngine
 from orchestrator.task_models import (
     CodingTask,
     MachineInfo,
-    MachineStatus,
-    ReviewResult,
     ReviewLayer,
+    ReviewResult,
     TaskResult,
     TaskStatus,
     TestResult,
 )
-from orchestrator.test_runner import TestRunner
 
 # ── 辅助工厂 ─────────────────────────────────────────────
 
@@ -188,9 +180,17 @@ async def test_tc122_doc_driven_accuracy(tmp_path):
         }
     ])
 
-    with patch.object(DocAnalyzer, "load_doc_set", return_value={"requirements.md": "# 需求\n实现用户认证"}), \
-         patch.object(DocAnalyzer, "_call_llm", new_callable=AsyncMock,
-                      return_value=mock_llm_response):
+    with (
+        patch.object(
+            DocAnalyzer, "load_doc_set",
+            return_value={"requirements.md": "# 需求\n实现用户认证"},
+        ),
+        patch.object(
+            DocAnalyzer, "_call_llm",
+            new_callable=AsyncMock,
+            return_value=mock_llm_response,
+        ),
+    ):
         analyzer = DocAnalyzer(cfg)
         tasks = await analyzer.analyze_and_decompose()
 
@@ -313,7 +313,6 @@ def test_tc125_ssh_key_auth():
     TC-125: Dispatcher SSH 命令使用 ed25519 密钥验证 (不使用密码)
     验证: 生成的 SSH 命令中不包含密码字段
     """
-    from orchestrator.dispatcher import Dispatcher
 
     cfg = MagicMock(spec=Config)
     cfg.get.return_value = None
@@ -332,7 +331,10 @@ def test_tc125_ssh_key_auth():
 
     # 检查内部 SSH 命令构建 (如果可用)
     if hasattr(disp, "_build_ssh_command") or hasattr(disp, "_build_command"):
-        cmd_builder = getattr(disp, "_build_ssh_command", None) or getattr(disp, "_build_command", None)
+        cmd_builder = (
+            getattr(disp, "_build_ssh_command", None)
+            or getattr(disp, "_build_command", None)
+        )
         if cmd_builder:
             cmd = cmd_builder(machine, "echo test")
             cmd_str = " ".join(cmd) if isinstance(cmd, list) else str(cmd)
@@ -382,7 +384,7 @@ def test_tc126_no_secrets_in_repo():
                     rel_path = py_file.relative_to(project_root)
                     violations.append(f"{rel_path}: 匹配 {pattern}")
 
-    assert not violations, f"发现敏感信息泄露:\n" + "\n".join(violations)
+    assert not violations, "发现敏感信息泄露:\n" + "\n".join(violations)
 
 
 # ═══════════════════════════════════════════════════════════
@@ -457,7 +459,7 @@ class NewModule:
 @pytest.mark.asyncio
 async def test_dashboard_api_status():
     """NFR-015: /api/status 返回有效 JSON"""
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
 
     transport = ASGITransport(app=dashboard_app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -477,7 +479,7 @@ async def test_dashboard_api_status():
 @pytest.mark.asyncio
 async def test_dashboard_api_health():
     """NFR-015: /api/health 返回健康状态"""
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
 
     transport = ASGITransport(app=dashboard_app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -492,7 +494,7 @@ async def test_dashboard_api_health():
 @pytest.mark.asyncio
 async def test_dashboard_api_machines():
     """NFR-015: /api/machines 返回机器列表"""
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
 
     transport = ASGITransport(app=dashboard_app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -508,7 +510,7 @@ async def test_dashboard_api_machines():
 @pytest.mark.asyncio
 async def test_dashboard_api_tasks():
     """NFR-015: /api/tasks 返回任务列表"""
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
 
     transport = ASGITransport(app=dashboard_app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:

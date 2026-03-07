@@ -9,7 +9,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from orchestrator.doc_parser import DocParser, MACHINE_ALIAS, MACHINE_DEFAULT_DIR
+from orchestrator.doc_parser import MACHINE_ALIAS, MACHINE_DEFAULT_DIR, DocParser
 from orchestrator.task_models import CodingTask
 
 

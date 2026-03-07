@@ -5,13 +5,10 @@ TC-110 ~ TC-120, 覆盖 IF-001 ~ IF-012
 """
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
-import time
 from pathlib import Path
-from typing import Dict, List, Optional
-from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -21,17 +18,19 @@ from orchestrator.doc_analyzer import DocAnalyzer
 from orchestrator.doc_parser import DocParser
 from orchestrator.git_ops import GitOps
 from orchestrator.machine_registry import MachineRegistry
-from orchestrator.main import Orchestrator, MAX_ROUNDS
+from orchestrator.main import Orchestrator
 from orchestrator.reporter import Reporter
 from orchestrator.reviewer import AutoReviewer
-from orchestrator.state_machine import TaskStateMachine, StateMachineError
-from orchestrator.task_engine import TaskEngine, CycleDependencyError
+from orchestrator.task_engine import CycleDependencyError, TaskEngine
 from orchestrator.task_models import (
-    CodingTask, MachineInfo, MachineStatus,
-    ReviewResult, TaskResult, TaskStatus, TestResult,
+    CodingTask,
+    MachineInfo,
+    ReviewResult,
+    TaskResult,
+    TaskStatus,
+    TestResult,
 )
 from orchestrator.test_runner import TestRunner
-
 
 # ═══════════════════════════════════════════════════════════
 # 辅助工厂
@@ -140,10 +139,10 @@ async def test_tc110_happy_path(tmp_path):
     registry.load_from_config(cfg.get_machines_list())
     engine = TaskEngine(config=cfg, machine_registry=registry)
 
-    # 2. Mock 外部依赖
-    dispatcher = MagicMock(spec=Dispatcher)
-    reviewer = MagicMock(spec=AutoReviewer)
-    test_runner = MagicMock(spec=TestRunner)
+    # 2. Mock 外部依赖 (instantiate to verify spec compatibility)
+    _dispatcher = MagicMock(spec=Dispatcher)  # noqa: F841
+    _reviewer = MagicMock(spec=AutoReviewer)  # noqa: F841
+    _test_runner = MagicMock(spec=TestRunner)  # noqa: F841
     reporter = MagicMock(spec=Reporter)
     git_ops = MagicMock(spec=GitOps)
 
@@ -454,7 +453,11 @@ async def test_tc117_llm_degradation(tmp_path):
     # Mock load_doc_set 返回文档
     with patch.object(analyzer, "load_doc_set", return_value={"req": "# Req\n需求文档"}):
         # Mock _call_llm 超时
-        with patch.object(analyzer, "_call_llm", new_callable=AsyncMock, side_effect=Exception("LLM Timeout")):
+        with patch.object(
+            analyzer, "_call_llm",
+            new_callable=AsyncMock,
+            side_effect=Exception("LLM Timeout"),
+        ):
             tasks = await analyzer.analyze_and_decompose()
 
     # LLM 失败 → 返回空列表 (降级)
@@ -491,8 +494,13 @@ async def test_tc117_llm_degradation(tmp_path):
         with patch.object(reviewer, "_run_l2_contract", new_callable=AsyncMock,
                           return_value=ReviewResult(passed=True, layer="L2", issues=[], score=4.0)):
             # Mock _run_l3_quality LLM 失败 → 降级通过
-            with patch.object(reviewer, "_run_l3_quality", new_callable=AsyncMock,
-                              return_value=ReviewResult(passed=True, layer="L3", issues=[], score=3.5)):
+            with patch.object(
+                reviewer, "_run_l3_quality",
+                new_callable=AsyncMock,
+                return_value=ReviewResult(
+                    passed=True, layer="L3", issues=[], score=3.5,
+                ),
+            ):
                 review_result = await reviewer.review_task(sample_task, sample_result)
 
     # 降级后仍然 passed (score >= 3.5)
@@ -698,7 +706,7 @@ def test_test_failure_retry_path(tmp_path):
     engine.enqueue([task])
 
     # Round 1: dispatch → review pass → test FAIL
-    batch = engine.next_batch()
+    engine.next_batch()
     engine.mark_dispatched("T001")
     engine.handle_coding_done("T001", _ok_dispatch_result("T001"))
     engine.handle_review_done("T001", _ok_review())

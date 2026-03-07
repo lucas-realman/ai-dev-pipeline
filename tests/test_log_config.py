@@ -12,7 +12,6 @@ import pytest
 
 from orchestrator.log_config import JsonFormatter, StandardFormatter, setup_logging
 
-
 # ── JsonFormatter ────────────────────────────────
 
 

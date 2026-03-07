@@ -15,10 +15,10 @@ import json
 import logging
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 if TYPE_CHECKING:
-    from .config import Config
+    pass
 
 from .task_models import CodingTask
 
@@ -316,7 +316,10 @@ class DocAnalyzer:
             if not pattern:
                 summary[doc_type] = 0
                 continue
-            full_pattern = str(self.project_path / pattern) if not Path(pattern).is_absolute() else pattern
+            if Path(pattern).is_absolute():
+                full_pattern = pattern
+            else:
+                full_pattern = str(self.project_path / pattern)
             matched = glob.glob(full_pattern, recursive=True)
             summary[doc_type] = len(matched)
         return summary

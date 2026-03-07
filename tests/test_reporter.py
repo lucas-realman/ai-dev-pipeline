@@ -3,7 +3,6 @@ L2 组件测试 — 报告与通知 (MOD-010)
 TC-090 ~ TC-094, 覆盖 FR-020 / FR-021
 对齐 TEST-001 §2.2.10
 """
-import json
 import time
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch

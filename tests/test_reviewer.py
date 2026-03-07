@@ -4,15 +4,13 @@ TC-070 ~ TC-073, 覆盖 FR-012 / FR-013 / ALG-032
 对齐 TEST-001 §2.2.8
 """
 import json
-import subprocess
-import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from orchestrator.reviewer import AutoReviewer
-from orchestrator.task_models import CodingTask, ReviewResult, TaskResult
+from orchestrator.task_models import CodingTask, TaskResult
 
 
 def _make_config(tmp_path: Path) -> MagicMock:

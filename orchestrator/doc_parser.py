@@ -10,10 +10,10 @@ from __future__ import annotations
 import logging
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 if TYPE_CHECKING:
-    from .config import Config
+    pass
 
 from .task_models import CodingTask
 
@@ -156,7 +156,10 @@ class DocParser:
                     task_id=task_id,
                     target_machine=machine_name,
                     target_dir=target_dir,
-                    description=f"{task_name}: {clean_instruction}" if clean_instruction else task_name,
+                    description=(
+                        f"{task_name}: {clean_instruction}"
+                        if clean_instruction else task_name
+                    ),
                     context_files=context_files,
                     acceptance=[acceptance] if acceptance else [],
                 ))

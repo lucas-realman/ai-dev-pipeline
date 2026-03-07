@@ -7,9 +7,7 @@ import argparse
 import asyncio
 import logging
 import signal
-import sys
 import time
-from pathlib import Path
 from typing import Dict, List, Optional
 
 from .config import Config
@@ -20,7 +18,6 @@ from .git_ops import GitOps
 from .machine_registry import MachineRegistry
 from .reporter import Reporter
 from .reviewer import AutoReviewer
-from .state_machine import TaskStateMachine
 from .task_engine import TaskEngine
 from .task_models import CodingTask, TaskResult, TaskStatus
 from .test_runner import TestRunner
@@ -101,7 +98,7 @@ class Orchestrator:
 
         # 收尾
         summary = self._compute_summary(tasks)
-        report_path = self.reporter.generate_report(sprint_id, tasks, summary)
+        self.reporter.generate_report(sprint_id, tasks, summary)
         await self.reporter.notify_sprint_done(sprint_id, tasks)
 
         # Git commit + tag
@@ -242,7 +239,10 @@ class Orchestrator:
                 log.warning("任务 %s 审查失败超过上限, 升级", task.task_id)
             else:
                 task.status = TaskStatus.QUEUED
-                log.info("任务 %s 审查未通过, 重新排队 (审查重试 %d)", task.task_id, task.review_retry)
+                log.info(
+                    "任务 %s 审查未通过, 重新排队 (审查重试 %d)",
+                    task.task_id, task.review_retry,
+                )
             await self.reporter.notify_task_result(task, review=review)
             return
 
@@ -257,7 +257,10 @@ class Orchestrator:
                 log.warning("任务 %s 测试失败超过上限, 升级", task.task_id)
             else:
                 task.status = TaskStatus.QUEUED
-                log.info("任务 %s 测试未通过, 重新排队 (测试重试 %d)", task.task_id, task.test_retry)
+                log.info(
+                    "任务 %s 测试未通过, 重新排队 (测试重试 %d)",
+                    task.task_id, task.test_retry,
+                )
             await self.reporter.notify_task_result(task, review=review, test=test_result)
             return
 

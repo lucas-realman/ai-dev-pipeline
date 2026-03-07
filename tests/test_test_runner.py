@@ -9,8 +9,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from orchestrator.test_runner import AcceptanceCriterion, TestRunner
 from orchestrator.task_models import CodingTask, TestResult
+from orchestrator.test_runner import AcceptanceCriterion, TestRunner
 
 
 def _make_config(tmp_path: Path) -> MagicMock:

@@ -4,14 +4,11 @@ TC-040 ~ TC-043, 覆盖 FR-016 / FR-017 / ALG-025a
 对齐 TEST-001 §2.2.4
 """
 import os
-import tempfile
-from pathlib import Path
 
 import pytest
 import yaml
 
 from orchestrator.config import Config, ConfigSchemaError
-
 
 # ── TC-040: 合法 YAML 加载 (FR-016) ──────────────────────
 

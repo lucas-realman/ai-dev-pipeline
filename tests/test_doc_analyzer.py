@@ -12,7 +12,6 @@ import pytest
 from orchestrator.doc_analyzer import DocAnalyzer
 from orchestrator.task_models import CodingTask
 
-
 # ── 辅助: 创建 Mock Config ──────────────────────────────
 
 def _make_config(tmp_path: Path, doc_set: dict = None) -> MagicMock:

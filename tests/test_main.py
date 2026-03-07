@@ -4,12 +4,12 @@ L2 组件测试 — 主编排器 & CLI (MOD-013)
 对齐 TEST-001 §2.2
 """
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from orchestrator.main import Orchestrator, build_parser, MAX_ROUNDS
-from orchestrator.task_models import CodingTask, TaskStatus, TaskResult, ReviewResult, TestResult
+from orchestrator.main import MAX_ROUNDS, Orchestrator, build_parser
+from orchestrator.task_models import CodingTask, TaskStatus
 
 
 def _make_config(tmp_path: Path) -> MagicMock:

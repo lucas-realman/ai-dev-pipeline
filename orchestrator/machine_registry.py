@@ -8,7 +8,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional
 
 from .task_models import MachineInfo, MachineStatus
 

@@ -11,13 +11,12 @@ import asyncio
 import json
 import logging
 import re
-import textwrap
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 from .config import Config
-from .task_models import CodingTask, TestResult
+from .task_models import CodingTask, TaskResult, TestResult
 
 log = logging.getLogger("orchestrator.test_runner")
 
@@ -47,7 +46,9 @@ class TestRunner:
 
     # ── 主要入口 ──
 
-    async def run_tests(self, task: CodingTask, result: Optional["TaskResult"] = None) -> TestResult:
+    async def run_tests(
+        self, task: CodingTask, result: Optional["TaskResult"] = None,
+    ) -> TestResult:
         """对一个任务执行测试 (DD-MOD-009 ALG-017)"""
         test_files = self._discover_test_files(task)
         if not test_files:
@@ -317,8 +318,10 @@ class TestRunner:
                 failed_count=result.failed_count,
                 error_count=result.error_count,
                 duration_sec=result.duration_sec,
-                details=f"[Fallback threshold] pass_rate={pass_rate:.2f} >= {self.fallback_threshold}\n"
-                        + result.details,
+                details=(
+                    f"[Fallback threshold] pass_rate={pass_rate:.2f}"
+                    f" >= {self.fallback_threshold}\n" + result.details
+                ),
             )
 
         return result

@@ -3,7 +3,6 @@ L2 组件测试 — 数据模型 (MOD-005)
 TC-003 ~ TC-005 补全, 覆盖 FR-001 / FR-002
 对齐 TEST-001 §2.2.5
 """
-import time
 
 import pytest
 
@@ -17,7 +16,6 @@ from orchestrator.task_models import (
     TaskStatus,
     TestResult,
 )
-
 
 # ── TC-003: CodingTask 创建与校验 (FR-001) ───────────────
 

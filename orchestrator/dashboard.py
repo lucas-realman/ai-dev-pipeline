@@ -7,9 +7,9 @@ from __future__ import annotations
 import logging
 import time
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
 from . import __version__
@@ -59,8 +59,13 @@ async def get_status() -> JSONResponse:
         result["machines"] = _get_machines_summary(orch)
         result["tasks"] = _get_tasks_summary(orch)
     else:
-        result["machines"] = {"total": 0, "online": 0, "busy": 0, "offline": 0}
-        result["tasks"] = {"total": 0, "queued": 0, "in_progress": 0, "passed": 0, "failed": 0, "escalated": 0}
+        result["machines"] = {
+            "total": 0, "online": 0, "busy": 0, "offline": 0,
+        }
+        result["tasks"] = {
+            "total": 0, "queued": 0, "in_progress": 0,
+            "passed": 0, "failed": 0, "escalated": 0,
+        }
 
     return JSONResponse(content=result)
 

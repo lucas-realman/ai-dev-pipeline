@@ -13,7 +13,7 @@ import socket
 import tempfile
 import time
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 from .config import Config
 from .machine_registry import MachineRegistry
@@ -217,7 +217,8 @@ git reset --hard origin/{branch}
 
 mkdir -p {task.target_dir}
 
-AIDER_MSG=$(cat {msg_remote_path} 2>/dev/null || echo '在 {task.target_dir} 目录下实现 {task.description[:80]}')
+AIDER_MSG=$(cat {msg_remote_path} 2>/dev/null || \
+  echo '在 {task.target_dir} 目录下实现 {task.description[:80]}')
 
 aider --model '{model}' \\
       --yes-always \\

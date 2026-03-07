@@ -7,19 +7,17 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
-import textwrap
-import time
 from pathlib import Path
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional
-from unittest.mock import AsyncMock, MagicMock, patch, mock_open
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from orchestrator.task_models import (
-    CodingTask, MachineInfo, MachineStatus, TaskResult, TaskStatus,
-    ReviewResult, TestResult,
+    CodingTask,
+    MachineInfo,
+    TaskResult,
+    TaskStatus,
+    TestResult,
 )
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -156,10 +154,15 @@ class TestReviewerReviewTask:
         py.write_text("def ok(): return 1\n")
 
         task = CodingTask(task_id="T1", description="test")
-        result_obj = TaskResult(task_id="T1", exit_code=0, files_changed=["good.py"])
+        result_obj = TaskResult(
+            task_id="T1", exit_code=0, files_changed=["good.py"],
+        )
 
         llm_resp = json.dumps({
-            "scores": {"功能完整性": 5, "接口正确性": 5, "错误处理": 5, "代码质量": 5, "可运行性": 5},
+            "scores": {
+                "功能完整性": 5, "接口正确性": 5,
+                "错误处理": 5, "代码质量": 5, "可运行性": 5,
+            },
             "average_score": 5.0,
             "issues": [],
             "fix_instruction": "",
@@ -264,8 +267,14 @@ class TestRunnerParseJsonReport:
             "duration": 2.0,
             "tests": [
                 {"outcome": "passed", "nodeid": "t::a"},
-                {"outcome": "failed", "nodeid": "t::b", "call": {"crash": {"message": "assert false"}}},
-                {"outcome": "failed", "nodeid": "t::c", "call": {"crash": {"message": "error"}}},
+                {
+                    "outcome": "failed", "nodeid": "t::b",
+                    "call": {"crash": {"message": "assert false"}},
+                },
+                {
+                    "outcome": "failed", "nodeid": "t::c",
+                    "call": {"crash": {"message": "error"}},
+                },
             ],
         }))
         result = runner._parse_json_report("T2", report)
@@ -394,7 +403,10 @@ class TestRunnerExtractKeywords:
 
     @pytest.mark.component
     def test_extract_from_task(self, runner):
-        task = CodingTask(task_id="T-100", description="x", target_dir="orchestrator/core", tags=["gpu"])
+        task = CodingTask(
+            task_id="T-100", description="x",
+            target_dir="orchestrator/core", tags=["gpu"],
+        )
         kw = runner._extract_keywords(task)
         assert "t_100" in kw
         assert "core" in kw
@@ -426,7 +438,6 @@ class TestRunnerAcceptanceTests:
     @pytest.mark.component
     @pytest.mark.asyncio
     async def test_run_acceptance_no_criteria(self, runner):
-        from orchestrator.test_runner import AcceptanceCriterion
         task = CodingTask(task_id="T1", description="x")
         result = await runner.run_acceptance_tests(task, [])
         assert result.passed
@@ -542,12 +553,18 @@ class TestDispatcherIsLocal:
 
     @pytest.mark.component
     def test_is_local(self, dispatcher):
-        m = MachineInfo(machine_id="m1", display_name="M1", host="localhost", user="dev", work_dir="/tmp")
+        m = MachineInfo(
+            machine_id="m1", display_name="M1",
+            host="localhost", user="dev", work_dir="/tmp",
+        )
         assert dispatcher._is_local(m)
 
     @pytest.mark.component
     def test_is_remote(self, dispatcher):
-        m = MachineInfo(machine_id="m2", display_name="M2", host="192.168.1.100", user="dev", work_dir="/tmp")
+        m = MachineInfo(
+            machine_id="m2", display_name="M2",
+            host="192.168.1.100", user="dev", work_dir="/tmp",
+        )
         assert not dispatcher._is_local(m)
 
 
@@ -680,7 +697,6 @@ class TestReporterNotify:
         from orchestrator.reporter import Reporter
         r = Reporter(cfg)
 
-        import httpx
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {"errcode": 0, "errmsg": "ok"}
@@ -715,7 +731,6 @@ class TestReporterNotify:
         r = Reporter(cfg)
 
         with patch.object(r, "_get_access_token", return_value="fake_token"):
-            import httpx
             mock_resp = MagicMock()
             mock_resp.status_code = 200
 
@@ -740,11 +755,17 @@ def config_obj(tmp_path):
     import yaml
     data = {
         "project": {"name": "testproj", "path": str(tmp_path), "branch": "dev"},
-        "orchestrator": {"mode": "auto", "current_sprint": 1, "poll_interval": 5, "max_concurrent": 8, "port": 9999},
+        "orchestrator": {
+            "mode": "auto", "current_sprint": 1,
+            "poll_interval": 5, "max_concurrent": 8, "port": 9999,
+        },
         "llm": {"openai_api_base": "http://fake", "openai_api_key": "sk-test", "model": "gpt-4"},
         "task": {"single_task_timeout": 300, "max_retries": 3},
         "git": {"branch": "release", "bare_repo": "/tmp/bare.git"},
-        "testing": {"pytest_args": "-x", "pass_threshold": 3.5, "report_dir": "out/", "test_pass_rate_threshold": 0.9},
+        "testing": {
+            "pytest_args": "-x", "pass_threshold": 3.5,
+            "report_dir": "out/", "test_pass_rate_threshold": 0.9,
+        },
         "notification": {"dingtalk_webhook": "https://hook"},
         "paths": {
             "task_card": "docs/tasks.md",

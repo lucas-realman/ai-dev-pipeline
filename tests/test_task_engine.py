@@ -12,7 +12,6 @@ from orchestrator.task_engine import CycleDependencyError, TaskEngine
 from orchestrator.task_models import (
     CodingTask,
     MachineInfo,
-    MachineStatus,
     ReviewResult,
     TaskResult,
     TaskStatus,
@@ -129,17 +128,35 @@ def test_tc033_all_done():
 
     # 完成 T-D1
     engine.mark_dispatched("T-D1")
-    engine.handle_coding_done("T-D1", TaskResult(task_id="T-D1", exit_code=0))
-    engine.handle_review_done("T-D1", ReviewResult(passed=True, score=5.0))
-    engine.handle_test_done("T-D1", TestResult(passed=True, task_id="T-D1", total=1, passed_count=1))
+    engine.handle_coding_done(
+        "T-D1", TaskResult(task_id="T-D1", exit_code=0),
+    )
+    engine.handle_review_done(
+        "T-D1", ReviewResult(passed=True, score=5.0),
+    )
+    engine.handle_test_done(
+        "T-D1",
+        TestResult(
+            passed=True, task_id="T-D1", total=1, passed_count=1,
+        ),
+    )
 
     assert engine.all_done() is False
 
     # 完成 T-D2
     engine.mark_dispatched("T-D2")
-    engine.handle_coding_done("T-D2", TaskResult(task_id="T-D2", exit_code=0))
-    engine.handle_review_done("T-D2", ReviewResult(passed=True, score=5.0))
-    engine.handle_test_done("T-D2", TestResult(passed=True, task_id="T-D2", total=1, passed_count=1))
+    engine.handle_coding_done(
+        "T-D2", TaskResult(task_id="T-D2", exit_code=0),
+    )
+    engine.handle_review_done(
+        "T-D2", ReviewResult(passed=True, score=5.0),
+    )
+    engine.handle_test_done(
+        "T-D2",
+        TestResult(
+            passed=True, task_id="T-D2", total=1, passed_count=1,
+        ),
+    )
 
     assert engine.all_done() is True
 

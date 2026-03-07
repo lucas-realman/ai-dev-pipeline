@@ -80,7 +80,8 @@ class Reporter:
             f"## {icon} 任务结果: {task.task_id}",
             f"- **状态**: {task.status.value}",
             f"- **机器**: {task.effective_machine}",
-            f"- **重试**: 编码 {task.retry_count}, 审查 {task.review_retry}, 测试 {task.test_retry}",
+            f"- **重试**: 编码 {task.retry_count}, "
+            f"审查 {task.review_retry}, 测试 {task.test_retry}",
         ]
         if review:
             layer_val = review.layer.value if hasattr(review.layer, "value") else review.layer

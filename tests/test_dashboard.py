@@ -3,18 +3,18 @@ L2 组件测试 — Dashboard API (DD-MOD-014, NFR-015)
 """
 from __future__ import annotations
 
+from unittest.mock import MagicMock
+
 import pytest
-from unittest.mock import MagicMock, patch
 
 from orchestrator.dashboard import (
-    app,
-    register_orchestrator,
     _get_machines_summary,
     _get_tasks_summary,
     _state,
+    app,
+    register_orchestrator,
 )
-from orchestrator.task_models import MachineInfo, MachineStatus, CodingTask, TaskStatus
-
+from orchestrator.task_models import CodingTask, MachineInfo, MachineStatus, TaskStatus
 
 # ── Fixtures ─────────────────────────────────────────────
 
@@ -37,7 +37,6 @@ class FakeRegistry:
 
 class FakeEngine:
     def __init__(self, tasks):
-        from orchestrator.state_machine import TaskStateMachine
         self._tasks = {}
         for t in tasks:
             sm = MagicMock()
@@ -66,7 +65,7 @@ def test_register_orchestrator():
 @pytest.mark.asyncio
 async def test_status_with_orchestrator():
     """/api/status 注册 Orchestrator 后返回聚合数据"""
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
 
     m1 = MachineInfo(machine_id="m1", host="10.0.0.1", user="dev", tags=["gpu"])
     m1.status = MachineStatus.ONLINE
@@ -103,7 +102,7 @@ async def test_status_with_orchestrator():
 @pytest.mark.asyncio
 async def test_machines_with_orchestrator():
     """/api/machines 返回详细机器信息"""
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
 
     m1 = MachineInfo(machine_id="gpu1", display_name="GPU-4090",
                      host="10.0.0.1", user="dev", tags=["gpu", "cuda"])
@@ -132,7 +131,7 @@ async def test_machines_with_orchestrator():
 @pytest.mark.asyncio
 async def test_tasks_with_orchestrator():
     """/api/tasks 返回详细任务信息"""
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
 
     t1 = CodingTask(task_id="T-100", description="实现核心模块", tags=["python"])
     t1.status = TaskStatus.DISPATCHED

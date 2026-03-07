@@ -10,14 +10,14 @@ import logging
 import threading
 from collections import OrderedDict, deque
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set
 
 if TYPE_CHECKING:
-    from .config import Config
+    pass
 
 from .machine_registry import MachineRegistry
 from .state_machine import TaskStateMachine
-from .task_models import CodingTask, MachineStatus, ReviewResult, TaskResult, TaskStatus, TestResult
+from .task_models import CodingTask, ReviewResult, TaskResult, TaskStatus, TestResult
 
 log = logging.getLogger("orchestrator.task_engine")
 

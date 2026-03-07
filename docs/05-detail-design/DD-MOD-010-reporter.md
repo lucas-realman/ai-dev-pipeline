@@ -31,6 +31,7 @@
 │ + notify_task_result(task, result)            «async»     │
 │ + notify_sprint_done(sprint_id, summary)     «async»     │
 │ + notify_error(message, context)             «async»     │
+│ + notify_shutdown(reason)                    «async»     │
 │ + generate_report(sprint_id, results) → str              │
 │ - _send_webhook(title, text)                 «async»     │
 │ - _send_openapi(title, text)                 «async»     │
@@ -44,7 +45,7 @@
 
 ## §2 核心函数设计
 
-### 2.1 通知接口 (5 个)
+### 2.1 通知接口 (6 个)
 
 | 方法 | 触发时机 | 消息内容 |
 |------|---------|---------|
@@ -53,6 +54,7 @@
 | `notify_task_result(task, result)` | 任务完成后 | pass/fail + score + duration |
 | `notify_sprint_done(sprint_id, summary)` | Sprint 结束 | 总结统计 |
 | `notify_error(message, context)` | 异常发生 | 错误信息 + 上下文 |
+| `notify_shutdown(reason)` | 系统停机 | 停机原因 (SIGTERM/SIGINT/异常) |
 
 所有通知方法内部调用 `_safe_notify`，确保通知失败不影响主流程。
 

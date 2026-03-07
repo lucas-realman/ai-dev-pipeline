@@ -21,9 +21,9 @@
 │ - llm_base          : str                                │
 │ - llm_key           : str                                │
 │ - llm_model         : str                                │
+│ + config            : Config                              │
 ├──────────────────────────────────────────────────────────┤
-│ + __init__(project_path, doc_set_config,                 │
-│            llm_base, llm_key, llm_model)                 │
+│ + __init__(config: Config)                                │
 │ + load_doc_set() → Dict[str, str]                        │
 │ + analyze_and_decompose(sprint?, extra_context?)         │
 │                        → List[CodingTask]    «async»     │
@@ -50,9 +50,9 @@
 
 | 项目 | 内容 |
 |------|------|
-| **签名** | `__init__(self, project_path: str, doc_set_config: Dict[str, str], llm_base: str = "", llm_key: str = "", llm_model: str = "")` |
-| **职责** | 初始化分析器，存储项目路径和 LLM 配置 |
-| **算法** | 直接赋值，`project_path` 转为 `Path` 对象 |
+| **签名** | `__init__(self, config: Config)` |
+| **职责** | 初始化分析器，从 config 获取项目路径和 LLM 配置 |
+| **算法** | `self.config = config; self.project_path = Path(config.work_dir); self.llm_base = config.openai_api_base; self.llm_key = config.openai_api_key; self.llm_model = config.model; self.doc_set_config = config.get("doc_set", {})` |
 | **异常** | 无 (延迟校验) |
 
 ### 2.2 `load_doc_set`
@@ -210,7 +210,7 @@ function _build_decompose_prompt(doc_set, sprint, extra_context):
 }
 ```
 
-#### ALG-005: LLM 调用与指数退避重试 ★v1.1
+#### ALG-032: LLM 调用与指数退避重试 ★v1.1
 
 ```
 async function _call_llm(prompt):
@@ -336,7 +336,7 @@ logs/llm_audit/
 | **算法** | 调用 `_extract_json` → 遍历数组 → 字段校验 → 构造 CodingTask |
 | **异常** | 非数组 → `ValueError` |
 
-#### ALG-006: 任务解析与字段校验 ★v1.2
+#### ALG-033: 任务解析与字段校验 ★v1.2
 
 > 对应 ACTION-ITEM v2.1 A-128: 防止 LLM 返回类型不匹配的字段值
 
@@ -542,5 +542,5 @@ doc_set:
 | 版本 | 日期 | 变更内容 |
 |------|------|---------|
 | v1.0 | 2026-03-07 | 从 DD-001 §1 提取并扩充，形成独立模块详述 |
-| v1.1 | 2026-03-07 | `_call_llm` 增加 3× 指数退避重试 (ALG-005); 新增重试决策矩阵 |
+| v1.1 | 2026-03-07 | `_call_llm` 增加 3× 指数退避重试 (ALG-032); 新增重试决策矩阵 |
 | v1.2 | 2026-03-07 | §2.5a LLM 审计日志; §2.6 字段类型校验 (A-125/A-128); MAX_DOC_LEN 可配置化 (A-126) |

@@ -27,11 +27,13 @@
 │ + get_all_machines() → List[MachineInfo]                 │
 │ + get_online_machines() → List[MachineInfo]              │
 │ + get_idle_machines() → List[MachineInfo]                │
+│ + get_busy_machines() → List[MachineInfo]                │
 │ + get_online_count() → int                               │
 │ + match_machine(task_tags, available?) → Optional[MI]    │
 │ + set_status(machine_id, status) → None                  │
 │ + set_busy(machine_id, task_id) → None                   │
 │ + set_idle(machine_id) → None                            │
+│ + set_offline(machine_id) → None                         │
 │ + update_load(machine_id, load) → None                   │
 │ - _pick_least_loaded(machines) → MachineInfo  «static»   │
 │ + __len__() → int                                        │
@@ -97,6 +99,7 @@
 | `get_all_machines()` | 无过滤 | `with self._lock` |
 | `get_online_machines()` | `status == ONLINE` | `with self._lock` |
 | `get_idle_machines()` | `status == ONLINE and current_task is None` | `with self._lock` |
+| `get_busy_machines()` | `status == BUSY` | `with self._lock` |
 | `get_online_count()` | `status in (ONLINE, BUSY)` | `with self._lock` |
 
 ### 2.5 `match_machine`
@@ -152,6 +155,7 @@ function match_machine(task_tags, available):
 | `set_status(id, status)` | `machine.status = status` | `with self._lock` |
 | `set_busy(id, task_id)` | `status = BUSY`, `current_task = task_id` | `with self._lock` |
 | `set_idle(id)` | `status = ONLINE`, `current_task = None` | `with self._lock` |
+| `set_offline(id)` | `status = ERROR`, `current_task = None` | `with self._lock` |
 | `update_load(id, load)` | `machine.load.update(load)` | `with self._lock` |
 
 ### 2.7 `_pick_least_loaded` (静态方法)

@@ -141,7 +141,7 @@ async function run_sprint(sprint_id=None):
     await _main_loop()
     
     # 6. 生成报告
-    results = engine.get_all_results()
+    results = engine.get_all_tasks()
     report_path = reporter.generate_report(sprint_id, results)
     
     # 7. Git 提交
@@ -309,34 +309,33 @@ function _detect_stale_busy_machines():
 async function _process_task_result(task, result):
     if not result.success:
         # 编码失败: 直接标记失败
-        engine.handle_coding_failed(task, result.stderr)
+        engine.handle_coding_done(task.task_id, result)
         await reporter.notify_task_result(task, result)
         return
     
     # 编码成功 → L1/L2/L3 审查
-    engine.handle_coding_done(task)
+    engine.handle_coding_done(task.task_id, result)
     review = await reviewer.review_task(task, result)
     
     if not review.passed:
         # 审查失败 → 重试
-        engine.handle_review_failed(task, review.fix_instruction)
+        engine.handle_review_done(task.task_id, review)
         await reporter.notify_task_result(task, result)
         return
     
-    engine.handle_review_passed(task)
+    engine.handle_review_done(task.task_id, review)
     
     # 审查通过 → 测试
     test_result = await test_runner.run_tests(task, result)
     
     if not test_result.passed:
         # 测试失败 → 重试
-        engine.handle_test_failed(task, test_result.summary)
+        engine.handle_test_done(task.task_id, test_result)
         await reporter.notify_task_result(task, result)
         return
     
     # 全部通过
-    engine.handle_test_passed(task)
-    engine.mark_done(task)
+    engine.handle_test_done(task.task_id, test_result)
     await reporter.notify_task_result(task, result)
 ```
 
@@ -451,7 +450,7 @@ def main():
 
 ---
 
-## §5a 用户交互场景 ★v1.2
+## §5 用户交互场景 ★v1.2
 
 > 对应 ACTION-ITEM v2.0 A-015: 描述各交互入口的用户行为期望
 
@@ -527,7 +526,7 @@ def main():
 
 ---
 
-## §5 常量
+## §6 常量
 
 | 常量 | 值 | 说明 |
 |------|-----|------|
@@ -537,7 +536,7 @@ def main():
 
 ---
 
-## §6 变更记录
+## §7 变更记录
 
 | 版本 | 日期 | 变更内容 |
 |------|------|---------|

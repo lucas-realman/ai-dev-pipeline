@@ -70,11 +70,11 @@
 | NFR-004 | 机器故障自动迁移 | 集成测试 | TC-062, TC-114 |
 | NFR-005 | ESCALATED 不超过 10% | 统计验证 | TC-120 |
 | NFR-006 | 日志可审计 | 人工 Review | TC-120 |
-| NFR-007 | 新模块 <1h 接入 | 架构 Review | — (设计约束) |
+| NFR-007 | 新模块 <1h 接入 | 架构 Review | TC-127 |
 | NFR-008 | 新机器 <5min 注册 | 操作验证 | TC-020 |
 | NFR-009 | LLM 可替换 | 配置切换验证 | TC-040 |
-| NFR-010 | SSH 密钥认证 | 安全 Review | — (部署约束) |
-| NFR-011 | 密钥不入库 | git grep 验证 | — |
+| NFR-010 | SSH 密钥认证 | 安全 Review | TC-125 |
+| NFR-011 | 密钥不入库 | git grep 验证 | TC-126 |
 | NFR-012 | API Key 环境变量 | 代码 Review | TC-041 |
 | NFR-013 | 结构化日志 | 日志格式检查 | TC-120 |
 | NFR-014 | 任务耗时追踪 | 性能报告 | TC-123 |
@@ -85,7 +85,7 @@
 | CON 编号 | 简述 | 影响模块 | 验证方式 |
 |---------|------|---------|---------|
 | CON-001 | Python ≥3.10 | 全部 | pyproject.toml requires-python |
-| CON-002 | asyncio 异步 | MOD-008,009,010,011,012 | 代码 Review |
+| CON-002 | asyncio 异步 | MOD-006,008,009,010,011,012 | 代码 Review |
 | CON-003 | YAML 配置 | MOD-004 | TC-040~043 |
 | CON-004 | pyproject.toml 打包 | MOD-013 | pip install 验证 |
 | CON-005 | 5 台物理机 | MOD-003 | TC-020, 部署验证 |
@@ -127,9 +127,9 @@
 | MOD-001 ~ MOD-013 | 代码模块 | OD-001 映射表 |
 | DM-001 ~ DM-008 | 数据模型 | OD-002 映射表 |
 | IF-001 ~ IF-012 | 接口契约 | OD-001 §2.2 / OD-003 |
-| ALG-001 ~ ALG-031 | 算法描述 | DD-MOD-001~013 |
+| ALG-001 ~ ALG-033 | 算法描述 | DD-MOD-001~013 |
 | SEQ-001 ~ SEQ-012 | 序列图 | DD-MOD-001~013 |
-| TC-001 ~ TC-123 | 测试用例 | TEST-001 §2 |
+| TC-001 ~ TC-127 | 测试用例 | TEST-001 §2 |
 
 **追溯链**: FR → SYS → ARCH → MOD → DD → IF/DM → TC
 

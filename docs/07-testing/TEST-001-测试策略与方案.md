@@ -194,16 +194,19 @@
 | TC-117 | LLM 降级全链路 ★v1.2 | IF-002,008 | mock LLM 超时 3 次 → DocAnalyzer 降级到 DocParser, Reviewer L2/L3 自动 3.5 分通过, 报告标记 "LLM_DEGRADED" |
 | TC-118 | 沙箱违规拦截 ★v1.2 | IF-006,010 | mock dispatch_task 返回 exit_code=99 → 任务直接 ESCALATED (不重试), 钉钉通知含 "沙箱违规" |
 | TC-119 | SSH 预检 + 机器淘汰 ★v1.2 | IF-004,005,006 | 3 台机器, 1 台 SSH 预检失败 → 标记 OFFLINE → next_batch 只分配到 2 台 → 任务正常完成 |
-| TC-11A | JSON 结构化日志链路 ★v1.2 | IF-001~012 | 开启 JSON 日志模式 → 执行 1 个 Sprint → 日志文件每行可 json.loads(), 含 event/task_id/sprint_id 字段 |
+| TC-120 | JSON 结构化日志链路 ★v1.2 | IF-001~012 | 开启 JSON 日志模式 → 执行 1 个 Sprint → 日志文件每行可 json.loads(), 含 event/task_id/sprint_id 字段 |
 
 ### 2.5 L4 验收测试
 
 | TC 编号 | 验收目标 | 映射 FR | 验收方式 |
 |---------|---------|--------|---------|
-| TC-120 | 单 Sprint 端到端 | FR-001~023 | 真实 5 台机器执行 1 个 Sprint，全部任务 PASSED |
-| TC-121 | 文档驱动正确性 | FR-001,002 | 人工对比：LLM 拆解结果 vs 文档任务卡原文 |
-| TC-122 | 报告可读性 | FR-016,017 | 人工阅读钉钉收到的 Sprint 报告 |
-| TC-123 | 性能基线 | NFR-001 | 单任务 SSH 分发延迟 <5s, 总 Sprint <30min |
+| TC-121 | 单 Sprint 端到端 | FR-001~023 | 真实 5 台机器执行 1 个 Sprint，全部任务 PASSED |
+| TC-122 | 文档驱动正确性 | FR-001,002 | 人工对比：LLM 拆解结果 vs 文档任务卡原文 |
+| TC-123 | 报告可读性 | FR-016,017 | 人工阅读钉钉收到的 Sprint 报告 |
+| TC-124 | 性能基线 | NFR-001 | 单任务 SSH 分发延迟 <5s, 总 Sprint <30min |
+| TC-125 | SSH 密钥认证验证 | NFR-010 | 配置 ed25519 密钥 → SSH 连接成功 → 非密钥方式拒绝连接 |
+| TC-126 | 密钥不入库 | NFR-011 | `git grep -i "private\|secret\|password" | grep -v test` 无匹配 |
+| TC-127 | 新模块 <1h 接入 | NFR-007 | 按文档添加新模块骨架 → 配置注册 → 通过冒烟测试 → 总耗时 <1h |
 
 ---
 
@@ -280,4 +283,4 @@ pytest -m acceptance -s -v
 | v1.0 | 2026-03-06 | 初始版本：4 层测试策略 + 45 个 TC + 自动化执行 | AutoDev Pipeline |
 | v1.1 | 2026-03-06 | 修正: MOD 编号与 OD-001 对齐, FR 映射修正 (A-002) | AutoDev Pipeline |
 | v1.2 | 2026-03-06 | 新增: FR-003 (TC-054~055), FR-018 (TC-093~094), FR-023 (TC-034~035) 共 6 条测试用例 (A-008) | AutoDev Pipeline |
-| v1.3 | 2026-03-07 | L3 集成测试补充 7 条 (TC-115~TC-11A): 循环依赖检测、快照恢复、LLM 降级、沙箱违规、SSH 预检、JSON 日志链路 (A-022/A-023) | AutoDev Pipeline |
+| v1.3 | 2026-03-07 | L3 集成测试补充 7 条 (TC-115~TC-120): 循环依赖检测、快照恢复、LLM 降级、沙箱违规、SSH 预检、JSON 日志链路 (A-022/A-023) | AutoDev Pipeline |

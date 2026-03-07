@@ -5,7 +5,7 @@
 > **状态**: 正式  
 > **更新日期**: 2026-03-07  
 > **对应源码**: `orchestrator/reviewer.py` (262 行)  
-> **上游文档**: [OD-MOD-008](../04-outline-design/OD-MOD-008-reviewer.md) · [DD-SYS-001](DD-SYS-001-系统详细设计.md)  
+> **上游文档**: [OD-MOD-007](../04-outline-design/OD-MOD-007-reviewer.md) · [DD-SYS-001](DD-SYS-001-系统详细设计.md)  
 > **下游文档**: [TEST-001](../07-testing/TEST-001-测试策略与方案.md)
 
 ---
@@ -63,7 +63,7 @@ async function review_task(task, result):
             passed=False,
             layer=ReviewLayer.L1_STATIC,
             score=0.0,
-            comments=l1_msg,
+            issues=l1_msg,
             fix_instruction="修复编译/lint 错误:\n" + l1_msg
         )
     
@@ -74,7 +74,7 @@ async function review_task(task, result):
             passed=False,
             layer=ReviewLayer.L2_CONTRACT,
             score=2.0,
-            comments=l2_msg,
+            issues=l2_msg,
             fix_instruction="契约违规需修复:\n" + l2_msg
         )
     
@@ -86,7 +86,7 @@ async function review_task(task, result):
         passed=(score >= threshold),
         layer=ReviewLayer.L3_QUALITY,
         score=score,
-        comments=l3_msg,
+        issues=l3_msg,
         fix_instruction=l3_msg if score < threshold else ""
     )
 ```
@@ -207,13 +207,13 @@ function _run_l1_static(result):
 | **签名** | `async _call_llm(self, system_prompt: str, user_prompt: str) → str` |
 | **HTTP** | POST `{llm_url}/chat/completions` |
 | **参数** | `{"model": model, "temperature": 0.1, "max_tokens": 2048, "messages": [...]}` |
-| **超时** | `aiohttp.ClientTimeout(total=120)` |
-| **重试策略** | 最多 3 次，指数退避 1s→2s→4s (与 DocAnalyzer ALG-005 共享策略) |
+| **超时** | `httpx.AsyncClient(timeout=120)` |
+| **重试策略** | 最多 3 次，指数退避 1s→2s→4s (与 DocAnalyzer ALG-032 共享策略) |
 | **返回** | `response.choices[0].message.content` |
 
 #### 重试逻辑
 
-AutoReviewer 的 `_call_llm` 采用与 DocAnalyzer ALG-005 相同的重试策略:
+AutoReviewer 的 `_call_llm` 采用与 DocAnalyzer ALG-032 相同的重试策略:
 - 429 速率限制 → 读取 `Retry-After` 头优先
 - 5xx 服务端错误 → 指数退避 1s→2s→4s
 - 4xx (非 429) → 不重试, 立即抛出

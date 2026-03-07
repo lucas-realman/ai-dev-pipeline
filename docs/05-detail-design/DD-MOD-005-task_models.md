@@ -22,7 +22,7 @@
 │   RETRY / ESCALATED                                  │
 ├─────────────────────────────────────────────────────┤
 │ ReviewLayer (3 值)                                   │
-│   STATIC / CONTRACT / DESIGN                         │
+│   L1_STATIC / L2_CONTRACT / L3_QUALITY               │
 ├─────────────────────────────────────────────────────┤
 │ MachineStatus (4 值)                                 │
 │   ONLINE / BUSY / OFFLINE / ERROR                    │
@@ -61,9 +61,9 @@
 
 | 枚举值 | 字符串值 | 说明 |
 |--------|---------|------|
-| `STATIC` | `"static"` | 静态检查 (py_compile + ruff) |
-| `CONTRACT` | `"contract"` | 契约对齐检查 (LLM) |
-| `DESIGN` | `"design"` | 设计符合度检查 (LLM) |
+| `L1_STATIC` | `"static"` | 静态检查 (py_compile + ruff) |
+| `L2_CONTRACT` | `"contract"` | 契约对齐检查 (LLM) |
+| `L3_QUALITY` | `"quality"` | 设计符合度检查 (LLM) |
 
 ### 2.3 MachineStatus
 
@@ -84,6 +84,7 @@
 |------|------|--------|------|------|
 | `task_id` | `str` | 必填 | 标识 | 任务唯一 ID (如 `S1_T1`) |
 | `description` | `str` | 必填 | 标识 | 任务描述 |
+| `module_name` | `str` | `""` | 标识 | 目标模块名称 (如 `"dispatcher"`) |
 | `tags` | `List[str]` | `[]` | v3 调度 | 能力标签 (gpu, backend, frontend) |
 | `context_files` | `List[str]` | `[]` | 输入 | 上下文文件路径列表 |
 | `depends_on` | `List[str]` | `[]` | 调度 | 前置依赖的 task_id 列表 |
@@ -163,7 +164,7 @@ class CodingTask:
 | `total_retries` | `int` | `review_retry + test_retry` |
 | `effective_machine` | `Optional[str]` | `assigned_machine or target_machine` (v3 优先) |
 
-### 3.3 序列化方法
+### 3.4 序列化方法
 
 #### `to_dict() → Dict[str, Any]`
 
@@ -222,6 +223,9 @@ function from_dict(d):
 | `duration_sec` | `float` | `0.0` | 执行耗时 |
 | `failures` | `List[str]` | `[]` | 失败详情 |
 | `stdout` | `str` | `""` | 原始输出 |
+| `pass_rate` | `float` | `0.0` | 通过率 (`passed_count / total`，total=0 时为 1.0) |
+| `reason` | `str` | `""` | 判定理由说明 |
+| `skipped_count` | `int` | `0` | 跳过的测试数 |
 
 ---
 
@@ -239,7 +243,8 @@ function from_dict(d):
 | `aider_prefix` | `str` | `""` | aider 执行前的 shell 前置命令 |
 | `aider_model` | `str` | `""` | 该机器专用模型覆盖 |
 | `status` | `MachineStatus` | `ONLINE` | 当前状态 |
-| `current_task` | `Optional[str]` | `None` | 当前执行的任务 ID |
+| `current_task_id` | `Optional[str]` | `None` | 当前执行的任务 ID |
+| `busy_since` | `Optional[datetime]` | `None` | 开始忙碌的时间戳 (用于 stale-busy 检测) |
 | `hardware_info` | `Dict[str, str]` | `{}` | 硬件信息 |
 | `load` | `Dict[str, float]` | `{"cpu_percent":0, "ram_percent":0, "disk_free_gb":0}` | 实时负载 |
 
@@ -275,4 +280,5 @@ function from_dict(d):
 | 版本 | 日期 | 变更内容 |
 |------|------|---------|
 | v1.0 | 2026-03-07 | 从 DD-001 §5 提取并扩充，形成独立模块详述 |
+| v1.1 | 2026-03-07 | ReviewLayer 枚举统一为 L1_STATIC/L2_CONTRACT/L3_QUALITY; MachineInfo 字段更新 (current_task_id, busy_since) |
 | v1.2 | 2026-03-07 | 新增 §3.2 `__post_init__` 输入校验 (task_id/target_dir/depends_on 白名单) |

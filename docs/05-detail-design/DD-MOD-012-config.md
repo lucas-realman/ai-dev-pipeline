@@ -47,6 +47,7 @@
 │ + dingtalk_app_key → Optional[str]                       │
 │ + dingtalk_app_secret → Optional[str]                    │
 │ + log_level → str                                        │
+│ + per_machine_branch → bool                              │
 └──────────────────────────────────────────────────────────┘
 ```
 
@@ -272,6 +273,7 @@ project:
   branch: "main"
   work_dir: "/path/to/repo"
   sprint_id: "sprint-001"
+  per_machine_branch: true          # 每台机器独立分支 (default: true)
 
 # ======== 路径配置 ========
 paths:
@@ -341,6 +343,7 @@ logging:
 | `pass_threshold` | `task.pass_threshold` | float | `0.8` |
 | `log_level` | `logging.level` | str | `"INFO"` |
 | `aider_version` | `task.aider_version` | str | `""` (不校验) |
+| `per_machine_branch` | `project.per_machine_branch` | bool | `true` |
 
 ---
 

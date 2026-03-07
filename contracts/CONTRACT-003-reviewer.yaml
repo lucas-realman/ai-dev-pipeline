@@ -59,7 +59,7 @@ methods:
         - "result.score >= 1.0 and result.score <= 5.0"
 
     execution_flow:
-      reference: "DD-MOD-008 ALG-010"
+      reference: "DD-MOD-008 ALG-015"
       layers:
         - layer: 1
           name: "静态检查 (Local)"
@@ -86,7 +86,7 @@ methods:
           retry:
             strategy: exponential_backoff
             max_retries: 3
-            reference: "DD-MOD-001 ALG-005"
+            reference: "DD-MOD-001 ALG-032"
 
         - layer: 3
           name: "LLM 设计符合度 (Cloud)"

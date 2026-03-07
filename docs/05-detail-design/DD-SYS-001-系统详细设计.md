@@ -400,7 +400,7 @@ class SanitizeFilter(logging.Filter):
 ┌─────────────────────────────────────────┐
 │  LLMProvider (抽象基类)                   │
 │                                          │
-│  + call(prompt, temperature, max_tokens) │
+│  + call(messages, temperature, max_tokens)│
 │      → str                               │
 │  + call_json(prompt, ...) → dict/list    │
 │  + parse_json_response(text) → Any       │
@@ -423,9 +423,8 @@ class LLMProvider(ABC):
     @abstractmethod
     async def call(
         self,
-        prompt: str,
+        messages: List[Dict[str, str]],
         *,
-        system_prompt: str = "",
         temperature: float = 0.2,
         max_tokens: int = 4096,
     ) -> str:
@@ -438,7 +437,7 @@ class LLMProvider(ABC):
         **kwargs,
     ) -> Any:
         """调用 LLM 并解析 JSON 响应，内置 3 级回退"""
-        text = await self.call(prompt, **kwargs)
+        text = await self.call(messages, **kwargs)
         return self._extract_json(text)
 
     @staticmethod
@@ -775,7 +774,7 @@ sequenceDiagram
         LLM-->>Caller: ❌ Exception
         Note over Caller: 降级处理
         Caller-->>Caller: DocAnalyzer → 返回空列表
-        Caller-->>Caller: AutoReviewer → score=4.0, passed=True
+        Caller-->>Caller: AutoReviewer → score=3.5, passed=True
     end
 ```
 

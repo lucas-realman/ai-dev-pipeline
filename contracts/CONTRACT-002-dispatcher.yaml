@@ -160,7 +160,7 @@ dependencies:
 
 # ─── SSH 预检契约 ────────────────────────────────────
 ssh_precheck:
-  reference: "DD-MOD-007 §2.8 (ALG-012)"
+  reference: "DD-MOD-007 §2.8 (ALG-013a)"
   command: "ssh -T -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new {user}@{host} 'echo __DISPATCHER_PING__'"
   success_condition: "exit_code == 0 AND stdout contains '__DISPATCHER_PING__'"
   failure_action: "标记机器 OFFLINE, 日志 WARNING"

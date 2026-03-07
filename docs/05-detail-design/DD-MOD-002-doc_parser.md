@@ -17,8 +17,9 @@
 │                      DocParser                           │
 ├──────────────────────────────────────────────────────────┤
 │ - repo_path          : Path                              │
+│ + config             : Config                             │
 ├──────────────────────────────────────────────────────────┤
-│ + __init__(repo_path: str)                               │
+│ + __init__(config: Config)                                │
 │ + parse_task_card(card_path?, sprint?) → List[CodingTask]│
 │ + read_contracts() → str                                 │
 │ - _extract_sprint_section(text, sprint) → str            │
@@ -47,9 +48,9 @@
 
 | 项目 | 内容 |
 |------|------|
-| **签名** | `__init__(self, repo_path: str)` |
-| **职责** | 初始化解析器，存储项目根路径 |
-| **算法** | `self.repo_path = Path(repo_path)` |
+| **签名** | `__init__(self, config: Config)` |
+| **职责** | 初始化解析器，从 config 获取项目根路径 |
+| **算法** | `self.config = config; self.repo_path = Path(config.work_dir)` |
 
 ### 2.2 `parse_task_card`
 

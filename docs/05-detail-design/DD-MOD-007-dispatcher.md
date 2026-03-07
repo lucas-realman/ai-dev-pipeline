@@ -5,7 +5,7 @@
 > **状态**: 正式  
 > **更新日期**: 2026-03-07  
 > **对应源码**: `orchestrator/dispatcher.py` (325 行)  
-> **上游文档**: [OD-MOD-007](../04-outline-design/OD-MOD-007-dispatcher.md) · [DD-SYS-001](DD-SYS-001-系统详细设计.md)  
+> **上游文档**: [OD-MOD-006](../04-outline-design/OD-MOD-006-dispatcher.md) · [DD-SYS-001](DD-SYS-001-系统详细设计.md)  
 > **下游文档**: [TEST-001](../07-testing/TEST-001-测试策略与方案.md)
 
 ---
@@ -31,6 +31,7 @@
 │ - _scp_content(machine, content, remote) → None «async»  │
 │ - _ssh_exec(machine, script, timeout) → TaskResult       │
 │                                              «async»     │
+│ - _ssh_exec_simple(machine, cmd) → str        «async»     │
 │ - _parse_changed_files(stdout, dir) → List[str] «static» │
 │ - _collect_local_ips() → Set[str]            «static»    │
 └──────────────────────────────────────────────────────────┘

@@ -5,7 +5,7 @@
 > **状态**: 正式  
 > **更新日期**: 2026-03-07  
 > **对应源码**: `orchestrator/state_machine.py` (147 行)  
-> **上游文档**: [OD-MOD-006](../04-outline-design/OD-MOD-006-state_machine.md) · [DD-SYS-001](DD-SYS-001-系统详细设计.md)  
+> **上游文档**: [OD-MOD-009](../04-outline-design/OD-MOD-009-state_machine.md) · [DD-SYS-001](DD-SYS-001-系统详细设计.md)  
 > **下游文档**: [TEST-001](../07-testing/TEST-001-测试策略与方案.md)
 
 ---
@@ -59,7 +59,7 @@
 
 ```python
 _TRANSITIONS = {
-    TaskStatus.CREATED:     [TaskStatus.QUEUED],
+    TaskStatus.CREATED:     [TaskStatus.QUEUED, TaskStatus.ESCALATED],
     TaskStatus.QUEUED:      [TaskStatus.DISPATCHED],
     TaskStatus.DISPATCHED:  [TaskStatus.CODING_DONE, TaskStatus.RETRY, TaskStatus.ESCALATED],
     TaskStatus.CODING_DONE: [TaskStatus.REVIEW],
@@ -76,22 +76,24 @@ _TRANSITIONS = {
 ### 2.2 状态转换图
 
 ```
-  CREATED ──────> QUEUED ──────> DISPATCHED
-                    ▲                │
-                    │          ┌─────┴─────┐
-                  RETRY        │           │
-                    ▲     CODING_DONE    RETRY/
-                    │          │        ESCALATED
-               ┌────┤     REVIEW
-               │    │       │
-            FAILED  │  ┌────┴────┐
-               ▲    │  │         │
-               │    │ TESTING  RETRY/
-            JUDGING │    │     ESCALATED
-               │    │ JUDGING
-          ┌────┴────┘    │
-          │         ┌────┴────┐
-        PASSED    PASSED    FAILED
+  CREATED ──┬───> QUEUED ──────> DISPATCHED
+            │       ▲                │
+            │       │          ┌─────┴─────┐
+            │     RETRY        │           │
+            │       ▲     CODING_DONE    RETRY/
+            │       │          │        ESCALATED
+            │  ┌────┤     REVIEW
+            │  │    │       │
+            │FAILED │  ┌────┴────┐
+            │  ▲    │  │         │
+            │  │    │ TESTING  RETRY/
+            │JUDGING│    │     ESCALATED
+            │  │    │ JUDGING
+            │  ┌────┴────┘    │
+            │  │         ┌────┴────┐
+            │PASSED    PASSED    FAILED
+            │
+            └───> ESCALATED
 ```
 
 ---

@@ -22,25 +22,25 @@
 
 | A-ID | 问题描述 | 涉及文档 | 修改内容 | 预估 | 状态 |
 |------|---------|---------|---------|------|------|
-| A-001 | Navigator 全局 ID 体系 TC 范围过旧 | 00-navigator §3 | `TC-001~TC-123` → `TC-001~TC-127` | 5 min | ⬜ |
-| A-002 | Navigator 全局 ID 体系 ALG 范围过旧 | 00-navigator §3 | `ALG-001~ALG-031` → `ALG-001~ALG-033` | 5 min | ⬜ |
-| A-003 | Navigator 快速链接 DD-001 行 ALG 范围 | 00-navigator §2 | `ALG-001~031` → `ALG-001~033` | 5 min | ⬜ |
+| A-001 | Navigator 全局 ID 体系 TC 范围过旧 | 00-navigator §3 | `TC-001~TC-123` → `TC-001~TC-127` | 5 min | ✅ |
+| A-002 | Navigator 全局 ID 体系 ALG 范围过旧 | 00-navigator §3 | `ALG-001~ALG-031` → `ALG-001~ALG-033` | 5 min | ✅ |
+| A-003 | Navigator 快速链接 DD-001 行 ALG 范围 | 00-navigator §2 | `ALG-001~031` → `ALG-001~033` | 5 min | ✅ |
 
 ## P2 — 中优先级 (4 项)
 
 | A-ID | 问题描述 | 涉及文档 | 修改内容 | 预估 | 状态 |
 |------|---------|---------|---------|------|------|
-| A-004 | TRACE-001 §4 ALG 覆盖率统计过旧 | TRACE-001 §4 | ALG 行 `31 \| 31` → `33 \| 33` | 5 min | ⬜ |
-| A-005 | TRACE-001 §2 MOD-001 反向追溯缺 ALG | TRACE-001 §2 | 补充 ALG-032~033 到 MOD-001 行 | 10 min | ⬜ |
-| A-006 | DD-MOD-010 HTTP 客户端不一致 | DD-MOD-010 ALG-021, DD-SYS-001 §8.1 | ALG-021 伪代码 `aiohttp.ClientSession` → `httpx.AsyncClient`，或在 §8.1 补充 aiohttp | 15 min | ⬜ |
-| A-007 | DD-SYS-001 config 属性名不匹配 | DD-SYS-001 §4.3 | `config.aider_model` → `config.model` (与 DD-MOD-012 §3.2 对齐) | 10 min | ⬜ |
+| A-004 | TRACE-001 §4 ALG 覆盖率统计过旧 | TRACE-001 §4 | ALG 行 `31 \| 31` → `33 \| 33` | 5 min | ✅ |
+| A-005 | TRACE-001 §2 MOD-001 反向追溯缺 ALG | TRACE-001 §2 | 补充 ALG-032~033 到 MOD-001 行 | 10 min | ✅ |
+| A-006 | DD-MOD-010 HTTP 客户端不一致 | DD-MOD-010 ALG-021, DD-SYS-001 §8.1 | ALG-021 伪代码 `aiohttp.ClientSession` → `httpx.AsyncClient`，或在 §8.1 补充 aiohttp | 15 min | ✅ |
+| A-007 | DD-SYS-001 config 属性名不匹配 | DD-SYS-001 §4.3 | `config.aider_model` → `config.model` (与 DD-MOD-012 §3.2 对齐) | 10 min | ✅ |
 
 ## P3 — 低优先级 (2 项)
 
 | A-ID | 问题描述 | 涉及文档 | 修改内容 | 预估 | 状态 |
 |------|---------|---------|---------|------|------|
-| A-008 | TEST-001 头部状态标记 | TEST-001 header | `状态: 草稿` → `状态: 正式` | 2 min | ⬜ |
-| A-009 | DD-SYS-001 §6.1 配置路径与 DD-MOD-012 不一致 | DD-SYS-001 §6.1, DD-MOD-012 §3 | 以 DD-MOD-012 为准同步 §6.1 (如 `orchestrator.max_concurrent` → `task.max_concurrent`) | 15 min | ⬜ |
+| A-008 | TEST-001 头部状态标记 | TEST-001 header | `状态: 草稿` → `状态: 正式` | 2 min | ✅ |
+| A-009 | DD-SYS-001 §6.1 配置路径与 DD-MOD-012 不一致 | DD-SYS-001 §6.1, DD-MOD-012 §3 | 以 DD-MOD-012 为准同步 §6.1 (如 `orchestrator.max_concurrent` → `task.max_concurrent`) | 15 min | ✅ |
 
 ---
 

@@ -86,8 +86,8 @@ function _send_webhook(title, text):
         }
     }
     
-    async with aiohttp.ClientSession() as session:
-        await session.post(url, json=payload, timeout=10)
+    async with httpx.AsyncClient() as client:
+        await client.post(url, json=payload, timeout=10)
 ```
 
 **`_compute_sign` 实现**:

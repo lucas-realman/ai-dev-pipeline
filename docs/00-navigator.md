@@ -91,7 +91,7 @@ docs/
 | 5 | [OD-001](04-outline-design/OD-001-模块概要设计.md) | 索引页 → OD-SYS-001 + OD-MOD-001~013 | MOD-001~013, IF-001~012 |
 | 6 | [OD-002](04-outline-design/OD-002-数据模型设计.md) | 数据模型 + 状态机 + 配置 | DM-001~008 |
 | 7 | [OD-003](04-outline-design/OD-003-接口契约设计.md) | 接口签名 + 外部 API + 错误码 | IF-001~012 (详细契约) |
-| 8 | [DD-001](05-detail-design/DD-001-详细设计说明书.md) | 索引页 → DD-SYS-001 + DD-MOD-001~013 | ALG-001~031, SEQ-001~012 |
+| 8 | [DD-001](05-detail-design/DD-001-详细设计说明书.md) | 索引页 → DD-SYS-001 + DD-MOD-001~013 | ALG-001~033, SEQ-001~012 |
 | 9 | [TEST-001](07-testing/TEST-001-测试策略与方案.md) | 4 层测试 + 45 用例 + 自动化 | TC-001~127 |
 | 10 | [TRACE-001](06-traceability/TRACE-001-追溯矩阵.md) | 全链路追溯 + 覆盖率 | 全部 ID 交叉引用 |
 | 11 | [ITER-001](08-iteration/ITER-001-迭代计划.md) | 里程碑 + Sprint 节奏 | M0~M3 |
@@ -137,8 +137,8 @@ docs/
 | MOD-001 ~ MOD-013 | 代码模块 | OD-001 映射表 |
 | DM-001 ~ DM-008 | 数据模型 | OD-002 映射表 |
 | IF-001 ~ IF-012 | 接口契约 | OD-001 §2.2 / OD-003 |
-| TC-001 ~ TC-123 | 测试用例 | TEST-001 §2 |
-| ALG-001 ~ ALG-031 | 算法描述 | DD-MOD-001~013 |
+| TC-001 ~ TC-127 | 测试用例 | TEST-001 §2 |
+| ALG-001 ~ ALG-033 | 算法描述 | DD-MOD-001~013 |
 | SEQ-001 ~ SEQ-012 | 序列图 | DD-MOD-001~013 |
 | RISK-001 ~ RISK-007 | 风险项 | OPS-003 §1 |
 

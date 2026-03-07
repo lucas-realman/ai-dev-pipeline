@@ -604,7 +604,7 @@ AutoReviewer._call_llm()   ──┘
 |------|-----------|-------------|---------|
 | API URL | `config.openai_api_base` | `config.openai_api_base` | 统一 |
 | API Key | `config.openai_api_key` | `config.openai_api_key` | 统一 |
-| Model | `config.aider_model` | `config.aider_model` | 统一 |
+| Model | `config.model` | `config.model` | 统一 |
 | Temperature | 0.2 | 0.1 | 调用方指定 |
 | Max Tokens | 4096 | 2048 | 调用方指定 |
 | Timeout | 30s | 10s | 调用方指定 |
@@ -791,7 +791,7 @@ sequenceDiagram
 | `doc_set.*` | Dict | DocAnalyzer | glob 模式 → 文档类型 |
 | `orchestrator.mode` | str | Main | sprint / continuous |
 | `orchestrator.current_sprint` | int | Main | 当前 Sprint 编号 |
-| `orchestrator.max_concurrent` | int | Main | 最大并发任务 |
+| `task.max_concurrent` | int | Main | 最大并发任务 |
 | `llm.openai_api_base` | str | DocAnalyzer, Reviewer | LLM API 地址 |
 | `llm.openai_api_key` | str | DocAnalyzer, Reviewer | LLM API 密钥 |
 | `llm.model` | str | DocAnalyzer, Reviewer | 模型名称 |

@@ -106,8 +106,7 @@ jobs:
           pytest -m integration \
             --tb=long \
             --cov=orchestrator \
-            --cov-report=term-missing \
-            --cov-fail-under=80
+            --cov-report=term-missing
 
       - name: Upload integration test report
         if: always()

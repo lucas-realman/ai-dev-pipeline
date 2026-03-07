@@ -59,8 +59,53 @@
 | 项目 | 内容 |
 |------|------|
 | **签名** | `__init__(self, config_path: Optional[str] = None)` |
-| **职责** | 初始化所有子模块 |
-| **顺序** | Config → MachineRegistry → TaskEngine → Dispatcher → AutoReviewer → TestRunner → Reporter → GitOps |
+| **职责** | 初始化所有子模块，注册信号处理 |
+| **顺序** | Config → MachineRegistry → TaskEngine → Dispatcher → AutoReviewer → TestRunner → Reporter → GitOps → ★信号注册 |
+
+### 2.1a 信号处理 ★v1.1
+
+> 对应 ACTION-ITEM v2.1 A-112: SIGTERM/SIGINT 优雅停机
+
+| 项目 | 内容 |
+|------|------|
+| **信号** | `SIGTERM`, `SIGINT` (Ctrl+C) |
+| **行为** | 设置 `_shutdown_flag = True` → 等待当前 batch 完成 → 保存快照 → 发送通知 → exit(0) |
+| **算法** | ALG-030a |
+
+#### ALG-030a: 优雅停机流程
+
+```
+# __init__ 中注册:
+_shutdown_flag = False
+
+def _signal_handler(signum, frame):
+    nonlocal _shutdown_flag
+    if _shutdown_flag:
+        # 第二次信号: 强制退出
+        log.warning("收到第二次终止信号, 强制退出")
+        sys.exit(1)
+    
+    _shutdown_flag = True
+    log.info("收到 %s, 等待当前 batch 完成后优雅退出...", 
+             signal.Signals(signum).name)
+
+signal.signal(signal.SIGTERM, _signal_handler)
+signal.signal(signal.SIGINT, _signal_handler)
+```
+
+**_main_loop 集成点** (ALG-030 补充):
+```
+# ALG-030 主循环中每轮检查:
+while round_num < MAX_ROUNDS:
+    if _shutdown_flag:
+        log.info("优雅停机: 保存快照并退出")
+        engine._save_snapshot()          # 持久化当前状态
+        reporter.notify_shutdown()       # 通知停机
+        break
+    
+    batch = engine.next_batch()
+    ... # 原有逻辑
+```
 
 ### 2.2 `run_sprint` ★
 
@@ -150,7 +195,7 @@ async function _discover_tasks(sprint_id):
 | **算法** | ALG-030 |
 | **常量** | `MAX_ROUNDS = 20` |
 
-#### ALG-030: 主调度循环
+#### ALG-030: 主调度循环 (含 stale-busy 检测 ★v1.1)
 
 ```
 async function _main_loop():
@@ -158,6 +203,16 @@ async function _main_loop():
     
     while round_num < MAX_ROUNDS:
         round_num += 1
+        
+        # ★v1.1: 优雅停机检查 (A-112)
+        if _shutdown_flag:
+            log.info("优雅停机: 保存快照并退出")
+            engine._save_snapshot()
+            await reporter.notify_shutdown()
+            break
+        
+        # ★v1.1: Stale-busy 检测 (A-116)
+        _detect_stale_busy_machines()
         
         # 1. 获取下一批可执行任务
         batch = engine.next_batch()
@@ -184,6 +239,45 @@ async function _main_loop():
     
     if round_num >= MAX_ROUNDS:
         log.error("达到最大轮次限制 %d", MAX_ROUNDS)
+```
+
+#### ALG-030b: Stale-busy 检测 ★v1.1
+
+> 对应 ACTION-ITEM v2.1 A-116: 检测 BUSY 状态超时的机器
+
+```
+function _detect_stale_busy_machines():
+    """
+    检测已处于 BUSY 状态超过 2×single_task_timeout 的机器。
+    这类机器可能因 SSH 断开、进程崩溃等原因未正常释放。
+    """
+    stale_threshold = config.single_task_timeout * 2    # 默认 1200s
+    now = time.time()
+    
+    for machine in registry.get_busy_machines():
+        if machine.busy_since and (now - machine.busy_since) > stale_threshold:
+            log.warning(
+                "模块 %s BUSY 超时 (%ds), 强制置为 IDLE",
+                machine.machine_id,
+                int(now - machine.busy_since)
+            )
+            registry.set_idle(machine.machine_id)
+            
+            # 该机器上的任务: 设置为 RETRY 或 ESCALATED
+            if machine.current_task_id:
+                task, sm = engine._get(machine.current_task_id)
+                if not sm.is_terminal:
+                    sm.handle_failure()
+                    if sm.is_retryable:
+                        sm.requeue()
+```
+
+**决策参数**:
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| `stale_threshold` | `2 × single_task_timeout` | 默认 2×600=1200s (20min) |
+| 检测频率 | 每轮主循环检查一次 | 约每 7s (2s wait + dispatch 时间) |
 ```
 
 ### 2.5 `_dispatch_batch`
@@ -372,3 +466,4 @@ def main():
 | 版本 | 日期 | 变更内容 |
 |------|------|---------|
 | v1.0 | 2026-03-07 | 从 DD-001 §13 提取并扩充，含完整 Sprint 生命周期 |
+| v1.1 | 2026-03-07 | ALG-030a SIGTERM/SIGINT 信号处理; ALG-030b Stale-busy 检测; ALG-030 集成优雅停机 |

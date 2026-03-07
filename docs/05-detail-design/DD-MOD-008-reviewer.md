@@ -159,7 +159,7 @@ function _run_l1_static(result):
 
 **User Prompt**: `契约内容 + 代码片段`
 
-**降级策略**: LLM 调用异常 → `(True, "L2 降级跳过")`
+**降级策略**: LLM 重试耗尽 (3×) 后仍失败 → `(True, "L2 降级跳过")`, score 不影响
 
 ---
 
@@ -192,13 +192,15 @@ function _run_l1_static(result):
 }
 ```
 
-**降级策略**: LLM 调用异常 → 返回 `(4.0, "L3 降级: 默认通过")`
+**降级策略**: LLM 重试耗尽 (3×) 后仍失败 → 返回 `(3.5, "L3 降级: 待人工审查")` ★v1.1
 
-> 设计理由: 降级分 4.0 > threshold 3.5 → 不阻塞流水线。
+> **v1.1 变更**: 降级分从 4.0 调整为 3.5 (= `review_threshold`)。此时 `score >= threshold` 仍为 True (边界值视为通过)，但降级任务会在报告中标记为「降级通过」，提醒人工关注。
+> 
+> **设计理由**: 原 score=4.0 > threshold 导致降级审查静默通过，人工无感知。改为 3.5 (= threshold) 使其刚好通过但不遮蔽降级事实。
 
 ---
 
-### 2.5 `_call_llm`
+### 2.5 `_call_llm` (含重试机制 ★v1.1)
 
 | 项目 | 内容 |
 |------|------|
@@ -206,7 +208,17 @@ function _run_l1_static(result):
 | **HTTP** | POST `{llm_url}/chat/completions` |
 | **参数** | `{"model": model, "temperature": 0.1, "max_tokens": 2048, "messages": [...]}` |
 | **超时** | `aiohttp.ClientTimeout(total=120)` |
+| **重试策略** | 最多 3 次，指数退避 1s→2s→4s (与 DocAnalyzer ALG-005 共享策略) |
 | **返回** | `response.choices[0].message.content` |
+
+#### 重试逻辑
+
+AutoReviewer 的 `_call_llm` 采用与 DocAnalyzer ALG-005 相同的重试策略:
+- 429 速率限制 → 读取 `Retry-After` 头优先
+- 5xx 服务端错误 → 指数退避 1s→2s→4s
+- 4xx (非 429) → 不重试, 立即抛出
+- 连接/超时 → 指数退避 1s→2s→4s
+- 重试耗尽 → 抛出 `LLMConnectionError` (ERR-009), 由 L2/L3 降级策略兜底
 
 ### 2.6 `_parse_json_response` (静态方法)
 
@@ -267,8 +279,8 @@ Orchestrator     AutoReviewer      subprocess       LLM API
 | 场景 | 处理策略 | 错误码 |
 |------|---------|--------|
 | ruff 未安装 | 跳过 L1 lint, 仅 py_compile | — |
-| LLM L2 超时/异常 | 降级为 compliant=True | ERR-010 |
-| LLM L3 超时/异常 | 降级分 score=4.0 (> threshold) | ERR-010 |
+| LLM L2 超时/异常 (重试 3× 后) | 降级为 compliant=True | ERR-009/010 |
+| LLM L3 超时/异常 (重试 3× 后) | 降级分 score=3.5 (= threshold) ★v1.1 | ERR-009/010 |
 | JSON 解析失败 | 三级回退解析；全部失败则降级 | ERR-010 |
 
 ---
@@ -278,3 +290,4 @@ Orchestrator     AutoReviewer      subprocess       LLM API
 | 版本 | 日期 | 变更内容 |
 |------|------|---------|
 | v1.0 | 2026-03-07 | 从 DD-001 §8 提取并扩充，形成独立模块详述 |
+| v1.1 | 2026-03-07 | `_call_llm` 增加 3× 指数退避重试; L3 降级分从 4.0 调为 3.5 |

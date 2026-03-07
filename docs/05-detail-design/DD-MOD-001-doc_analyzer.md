@@ -166,15 +166,16 @@ function _build_decompose_prompt(doc_set, sprint, extra_context):
 - 输出 JSON schema 示例
 - 7 条分解规则（task_id 格式、tags 必填、target_dir、acceptance 等）
 
-### 2.5 `_call_llm`
+### 2.5 `_call_llm` (含重试机制 ★v1.1)
 
 | 项目 | 内容 |
 |------|------|
 | **签名** | `async _call_llm(self, prompt: str) → str` |
-| **职责** | 通过 OpenAI-compatible API 调用 LLM |
+| **职责** | 通过 OpenAI-compatible API 调用 LLM，内置指数退避重试 |
 | **依赖** | `httpx.AsyncClient` |
 | **参数** | `temperature=0.2`, `max_tokens=4096`, `timeout=180s` |
-| **异常** | 未配置 API → `RuntimeError`；HTTP 错误 → `httpx.HTTPStatusError` |
+| **重试策略** | 最多 3 次，指数退避 1s→2s→4s |
+| **异常** | 未配置 API → `RuntimeError`；重试耗尽 → `LLMConnectionError` (ERR-009) |
 
 **请求结构**:
 ```json
@@ -185,6 +186,71 @@ function _build_decompose_prompt(doc_set, sprint, extra_context):
     "max_tokens": 4096
 }
 ```
+
+#### ALG-005: LLM 调用与指数退避重试 ★v1.1
+
+```
+async function _call_llm(prompt):
+    if not self.llm_base or not self.llm_key:
+        raise RuntimeError("LLM 未配置")
+    
+    MAX_RETRIES = 3
+    BACKOFF_BASE = 1      # 秒
+    last_error = None
+    
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            async with httpx.AsyncClient(timeout=180) as client:
+                resp = await client.post(
+                    f"{self.llm_base}/chat/completions",
+                    headers={"Authorization": f"Bearer {self.llm_key}"},
+                    json={"model": model, "temperature": 0.2,
+                          "max_tokens": 4096,
+                          "messages": [{"role": "user", "content": prompt}]}
+                )
+                resp.raise_for_status()
+                return resp.json()["choices"][0]["message"]["content"]
+        
+        except httpx.HTTPStatusError as e:
+            last_error = e
+            if e.response.status_code == 429:
+                # 429 速率限制: 优先读取 Retry-After 头
+                retry_after = int(e.response.headers.get("Retry-After", 
+                                  BACKOFF_BASE * (2 ** (attempt - 1))))
+                log.warning("LLM 429 速率限制, 等待 %ds (第 %d/%d 次)",
+                            retry_after, attempt, MAX_RETRIES)
+                await asyncio.sleep(retry_after)
+            elif e.response.status_code >= 500:
+                # 5xx 服务端错误: 标准退避
+                wait = BACKOFF_BASE * (2 ** (attempt - 1))
+                log.warning("LLM %d 错误, 退避 %ds (第 %d/%d 次)",
+                            e.response.status_code, wait, attempt, MAX_RETRIES)
+                await asyncio.sleep(wait)
+            else:
+                # 4xx (非 429): 不可重试
+                raise
+        
+        except (httpx.ConnectError, httpx.TimeoutException) as e:
+            last_error = e
+            wait = BACKOFF_BASE * (2 ** (attempt - 1))
+            log.warning("LLM 连接/超时错误, 退避 %ds (第 %d/%d 次)",
+                        wait, attempt, MAX_RETRIES)
+            await asyncio.sleep(wait)
+    
+    # 重试耗尽
+    log.error("LLM 调用失败, 已重试 %d 次: %s", MAX_RETRIES, last_error)
+    raise LLMConnectionError(f"LLM 重试耗尽: {last_error}")   # ERR-009
+```
+
+**重试决策矩阵**:
+
+| HTTP 状态 | 是否重试 | 退避策略 | 说明 |
+|-----------|---------|---------|------|
+| 429 | ✅ | `Retry-After` 头优先 | 速率限制 (ERR-026) |
+| 500~599 | ✅ | 指数退避 1s→2s→4s | 服务端临时故障 |
+| 400~499 (非429) | ❌ | 立即抛出 | 请求本身有误，重试无意义 |
+| 连接超时 | ✅ | 指数退避 1s→2s→4s | 网络问题 |
+| 重试耗尽 | — | 抛 `LLMConnectionError` | 上游 `analyze_and_decompose` catch 后返回 `[]` |
 
 ### 2.6 `_parse_tasks_from_llm`
 
@@ -328,3 +394,4 @@ doc_set:
 | 版本 | 日期 | 变更内容 |
 |------|------|---------|
 | v1.0 | 2026-03-07 | 从 DD-001 §1 提取并扩充，形成独立模块详述 |
+| v1.1 | 2026-03-07 | `_call_llm` 增加 3× 指数退避重试 (ALG-005); 新增重试决策矩阵 |

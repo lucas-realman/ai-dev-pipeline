@@ -63,13 +63,23 @@
 | **算法** | ALG-013 |
 | **超时** | `config.single_task_timeout` (默认 600s) |
 
-#### ALG-013: 单任务分发流程
+#### ALG-013: 单任务分发流程 (含 SSH 预检 ★v1.1)
 
 ```
 async function dispatch_task(task):
     machine = _get_machine(task)
     if machine is None:
         return TaskResult(exit_code=1, stderr="未找到机器")
+    
+    # ★v1.1 A-113: SSH 连接预检
+    if not _is_local(machine):
+        ok = await _ssh_pre_check(machine)
+        if not ok:
+            registry.set_offline(machine.machine_id)
+            # 尝试换一台机器
+            machine = _get_machine(task, exclude=[machine.machine_id])
+            if machine is None:
+                return TaskResult(exit_code=1, stderr="无可用机器")
     
     start_time = time.time()
     log.info("分发到 %s", machine.machine_id)
@@ -148,13 +158,17 @@ async function dispatch_task(task):
 | **职责** | 构建远程执行的完整 shell 脚本 |
 | **算法** | ALG-014 |
 
-#### ALG-014: SSH 脚本构建
+#### ALG-014: SSH 脚本构建 (含退出码边界处理 ★v1.1)
 
 ```bash
 # 1. 环境准备
 {machine.aider_prefix}              # 如 conda activate, nvm use 等
-export OPENAI_API_BASE='{api_base}'
-export OPENAI_API_KEY='{api_key}'
+# ★v1.1 A-114: API Key 通过 SSH env 传递 (SendEnv)
+# 客户端 ssh_config 配置: SendEnv OPENAI_API_KEY OPENAI_API_BASE
+# 服务端 sshd_config 配置: AcceptEnv OPENAI_*
+# 回退方案: 若 SSH env 传递不可用，仍在脚本中 export
+export OPENAI_API_BASE="${OPENAI_API_BASE:-'{api_base}'}"
+export OPENAI_API_KEY="${OPENAI_API_KEY:-'{api_key}'}"
 cd {machine.work_dir}
 
 # 2. Git 工作区清理
@@ -174,22 +188,40 @@ aider --model '{model}' \
       --message "$AIDER_MSG"
 AIDER_EXIT=$?
 
-# 4. 智能退出码修正
+# 4. 智能退出码修正 (含边界处理 ★v1.1 A-009)
 FILE_COUNT=$(find {target_dir} -type f -not -name '.gitkeep' | wc -l)
+
+# 退出码边界规则:
+# - aider exit > 255   : 取模 (AIDER_EXIT & 0xFF) — POSIX shell 自动处理
+# - aider exit < 0     : 取补码 (256 + AIDER_EXIT)     — Python 返回值
+# - aider exit = None   : 进程被信号杀死 (SIGKILL/SIGSEGV)，
+#                         对应 exit_code = -signal_num，视为失败
+# - aider exit = 124    : 超时 (timeout 命令约定)
+# - aider exit = 126/127: 命令不可执行/未找到 → 失败
+
 if AIDER_EXIT != 0 && FILE_COUNT > 0: AIDER_EXIT=0   # 有文件算成功
 if AIDER_EXIT == 0 && FILE_COUNT == 0: AIDER_EXIT=1   # 无文件算失败
 
-# 5. Git 提交 + 3 次重试推送
+# 5. Git 提交 + 3 次重试推送 (含推送策略增强 ★v1.1 A-117)
+PUSH_COUNT=0
 if AIDER_EXIT == 0:
+    # ★v1.1: 每机 branch 支持 (per-machine branch push)
+    PUSH_BRANCH="{branch}"             # 默认: 主分支
+    # 可选: PUSH_BRANCH="auto/{machine_id}/{task_id}"  # per-machine 分支
+    
     git add -A {target_dir} tests/
     git commit -m '[{task_id}] auto: {description}'
     
     for RETRY in 1 2 3:
-        git pull --rebase && git push && break
-        git rebase --abort
-        git pull --no-rebase && git push && break
-        git merge --abort
+        git pull --rebase origin $PUSH_BRANCH && git push origin HEAD:$PUSH_BRANCH && { PUSH_COUNT=$((PUSH_COUNT+1)); break; }
+        git rebase --abort 2>/dev/null || true
+        git pull --no-rebase origin $PUSH_BRANCH && git push origin HEAD:$PUSH_BRANCH && { PUSH_COUNT=$((PUSH_COUNT+1)); break; }
+        git merge --abort 2>/dev/null || true
         sleep 2
+    done
+    
+    # ★v1.1: 推送计数 (Orchestrator 侧累加用于告警)
+    echo "__PUSH_COUNT__=$PUSH_COUNT"
 
 # 6. 清理临时文件
 rm -f {msg_remote_path}
@@ -200,6 +232,10 @@ exit $AIDER_EXIT
 - **Git push 3 次重试**: 先 rebase 推，失败则 no-rebase 推，避免并发冲突
 - **智能退出码**: aider 返回非零但有文件产出 → 视为成功
 - **contract_reads**: 自动扫描 `contracts/*.yaml` + task_card 加入 `--read` 参数
+- **★v1.1 A-117 推送策略增强**:
+  - **推送计数告警**: Orchestrator 解析 stdout 中的 `__PUSH_COUNT__`，单 Sprint 累计超过阈值 (default: 50) 时触发 WARNING，提示可能存在分支冲突风险
+  - **Per-machine 分支**: 当 `config.per_machine_branch=true` 时，每台机器推送到 `auto/{machine_id}/{task_id}` 分支，由 Orchestrator 在 Sprint 结束后统一 merge 回主分支
+  - **退出码边界** (★v1.1 A-009): 文档化 >255 取模、负数取补码、None 为信号终止、124 为超时
 
 ### 2.6 `_scp_content`
 
@@ -222,14 +258,74 @@ exit $AIDER_EXIT
 | **输入** | script 通过 stdin pipe 传入 |
 | **超时** | `asyncio.wait_for(proc.communicate(), timeout)` |
 
-### 2.8 `_collect_local_ips` (静态方法)
+### 2.8 `_ssh_pre_check` ★v1.1
+
+> 对应 ACTION-ITEM v2.1 A-113: SSH 连接预检
+
+| 项目 | 内容 |
+|------|------|
+| **签名** | `async _ssh_pre_check(self, machine: MachineInfo) → bool` |
+| **职责** | 分发前验证目标机器 SSH 连通性，快速失败 |
+| **超时** | 5秒 (ConnectTimeout=5) |
+| **算法** | ALG-013a |
+
+#### ALG-013a: SSH 连接预检
+
+```
+async function _ssh_pre_check(machine):
+    """
+    轻量级 SSH 连通性检查。
+    成功: 返回 True
+    失败: 记录日志 + 返回 False (调用方负责置为 OFFLINE)
+    """
+    cmd = [
+        'ssh', '-T',
+        '-o', 'ConnectTimeout=5',
+        '-o', 'BatchMode=yes',         # 禁止交互式密码提示
+        '-p', str(machine.port),
+        f'{machine.user}@{machine.host}',
+        'echo ok'
+    ]
+    
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        stdout, stderr = await asyncio.wait_for(
+            proc.communicate(), timeout=10   # 整体超时 10s (> ConnectTimeout)
+        )
+        
+        if proc.returncode == 0 and 'ok' in stdout.decode():
+            return True
+        
+        log.warning("机器 %s SSH 预检失败: exit=%d, %s",
+                    machine.machine_id, proc.returncode, stderr.decode())
+        return False
+        
+    except asyncio.TimeoutError:
+        log.warning("机器 %s SSH 预检超时 (10s)", machine.machine_id)
+        return False
+    except Exception as e:
+        log.warning("机器 %s SSH 预检异常: %s", machine.machine_id, e)
+        return False
+```
+
+**设计决策**:
+- `BatchMode=yes`: 禁止密码提示，避免阻塞
+- `ConnectTimeout=5`: 快速失败，不拖慢主流程
+- 失败后 `registry.set_offline(machine_id)` 由调用方在 ALG-013 中完成
+- 不在此处重试 — 重试由任务重新调度实现
+
+### 2.9 `_collect_local_ips` (静态方法)
 
 | 项目 | 内容 |
 |------|------|
 | **职责** | 收集本机所有 IP 地址 |
 | **算法** | 初始集合 `{127.0.0.1, localhost, ::1}` + `socket.gethostname()` + `getaddrinfo()` |
 
-### 2.9 `_parse_changed_files` (静态方法)
+### 2.10 `_parse_changed_files` (静态方法)
 
 | 项目 | 内容 |
 |------|------|
@@ -304,3 +400,4 @@ Orchestrator    Dispatcher       远程机器          Git Remote
 | 版本 | 日期 | 变更内容 |
 |------|------|---------|
 | v1.0 | 2026-03-07 | 从 DD-001 §7 提取并扩充，形成独立模块详述 |
+| v1.1 | 2026-03-07 | ALG-013a SSH 预检; ALG-014 API Key env 传递+退出码边界; A-117 推送策略增强 |

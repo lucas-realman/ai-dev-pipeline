@@ -24,7 +24,8 @@
 │ + task         : CodingTask                              │
 │ + max_retries  : int                                     │
 ├──────────────────────────────────────────────────────────┤
-│ + __init__(task, max_retries=3)                          │
+│ + __init__(task, max_retries=3,                          │
+│            on_state_change=None)                          │
 │ + enqueue() → None                                       │
 │ + dispatch() → None                                      │
 │ + coding_done(result: TaskResult) → None                 │
@@ -105,7 +106,7 @@ _TRANSITIONS = {
 | **职责** | 执行状态转换，验证合法性 |
 | **算法** | ALG-012 |
 
-#### ALG-012: 合法转换校验
+#### ALG-012: 合法转换校验 (含持久化回调)
 
 ```
 function _transit(new_status):
@@ -120,7 +121,16 @@ function _transit(new_status):
     
     task.status = new_status
     log.info("[%s] %s → %s", task_id, old, new_status)
+    
+    # ★v1.1: 持久化回调 — 通知 TaskEngine 保存快照
+    if self._on_state_change is not None:
+        try:
+            self._on_state_change(task.task_id, old, new_status)
+        except Exception as e:
+            log.warning("持久化回调失败: %s (不阻塞状态转换)", e)
 ```
+
+> **设计决策**: 回调失败不阻塞状态转换——状态机的首要职责是状态管理，持久化是 best-effort。回调由 TaskEngine 在创建 `TaskStateMachine(task, max_retries, on_state_change=self._save_snapshot)` 时注入。
 
 ### 3.2 便捷转换方法
 
@@ -278,3 +288,4 @@ TaskEngine        StateMachine       CodingTask
 | 版本 | 日期 | 变更内容 |
 |------|------|---------|
 | v1.0 | 2026-03-07 | 从 DD-001 §6 提取并扩充，形成独立模块详述 |
+| v1.1 | 2026-03-07 | `__init__` 增加 `on_state_change` 回调参数; ALG-012 `_transit()` 增加持久化回调 |

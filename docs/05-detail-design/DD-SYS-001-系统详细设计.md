@@ -44,22 +44,29 @@ BaseException
     └── AutoDevError                     [ERR-001] 基类，所有自定义异常继承此类
         ├── ConfigError                  [ERR-002] 配置加载/解析错误
         │   ├── ConfigFileNotFound       [ERR-003] config.yaml 不存在
-        │   └── ConfigKeyError           [ERR-004] 必需配置项缺失
+        │   ├── ConfigKeyError           [ERR-004] 必需配置项缺失
+        │   └── ConfigSchemaError        [ERR-025] 配置 schema 校验失败 ★v1.1
         ├── DocError                     [ERR-005] 文档相关错误
         │   ├── DocNotFoundError         [ERR-006] 文档路径不存在
         │   └── DocParseError            [ERR-007] 文档解析失败
         ├── LLMError                     [ERR-008] LLM 调用相关错误
         │   ├── LLMConnectionError       [ERR-009] LLM API 连接失败
         │   ├── LLMResponseError         [ERR-010] LLM 返回非预期格式
-        │   └── LLMTokenLimitError       [ERR-011] Token 超限
+        │   ├── LLMTokenLimitError       [ERR-011] Token 超限
+        │   └── LLMRateLimitError        [ERR-026] 429 速率限制 ★v1.1
         ├── DispatchError                [ERR-012] 任务分发错误
         │   ├── SSHConnectionError       [ERR-013] SSH 连接失败
         │   └── SCPTransferError         [ERR-014] SCP 文件传输失败
         ├── StateMachineError            [ERR-015] 状态转换非法 (已实现)
+        ├── DependencyCycleError         [ERR-020] 任务循环依赖 ★v1.1
         ├── ReviewError                  [ERR-016] 审查执行错误
         ├── TestError                    [ERR-017] 测试执行错误
         │   └── TestTimeoutError         [ERR-018] 测试超时
-        └── GitError                     [ERR-019] Git 操作失败
+        ├── GitError                     [ERR-019] Git 操作失败
+        └── OpsError                     [ERR-021] 运维场景异常 ★v1.1
+            ├── DiskFullError            [ERR-022] 磁盘空间不足
+            ├── OOMError                 [ERR-023] 内存溢出
+            └── SSHKeyRotationError      [ERR-024] SSH 密钥轮换失败
 ```
 
 ### 2.2 当前实现状况
@@ -68,14 +75,85 @@ BaseException
 |--------|--------|------|---------|
 | ERR-001 | AutoDevError | **待实现** | 建议: `orchestrator/errors.py` |
 | ERR-015 | StateMachineError | **已实现** | MOD-009 (state_machine.py) |
+| ERR-020 | DependencyCycleError | **v1.1 设计** | MOD-004 (task_engine.py), 见 ALG-009a |
+| ERR-021~024 | OpsError 体系 | **v1.1 设计** | 运维场景: 磁盘/OOM/SSH 密钥轮换 |
+| ERR-025 | ConfigSchemaError | **v1.1 设计** | MOD-012 (config.py), 见 §2.4 校验 |
+| ERR-026 | LLMRateLimitError | **v1.1 设计** | MOD-001/MOD-008 LLM 重试, 见 §4.4 |
 | 其他 | — | **待实现** | 当前各模块直接使用 Python 内建异常 |
 
-### 2.3 异常处理原则
+### 2.3 运维故障场景处理 ★v1.1
+
+> 对应 ACTION-ITEM v2.0 A-010: 5 个运维故障场景的详细处理逻辑
+
+#### 场景 1: 磁盘空间不足 (ERR-022 DiskFullError)
+
+| 项目 | 内容 |
+|------|------|
+| **触发条件** | SSH 执行返回 stderr 含 `No space left on device` 或 `ENOSPC` |
+| **检测点** | Dispatcher._ssh_exec() 结果解析 |
+| **处理流程** | ① 标记该机器为 OFFLINE → ② 当前任务 RETRY (迁移到其他机器) → ③ 发送钉钉告警 (含 machine_id + 磁盘使用) → ④ Orchestrator 后续不再向该机器分发 |
+| **恢复条件** | 运维手动清理磁盘后，通过 API 或重启恢复机器状态为 IDLE |
+| **日志级别** | ERROR |
+
+#### 场景 2: 内存溢出 (ERR-023 OOMError)
+
+| 项目 | 内容 |
+|------|------|
+| **触发条件** | SSH 进程被 OOM Killer 终止 (exit_code = -9/137) 或 stderr 含 `Killed`/`MemoryError` |
+| **检测点** | Dispatcher._ssh_exec() exit_code 分析 |
+| **处理流程** | ① 标记机器为 OFFLINE → ② 当前任务 RETRY → ③ 钉钉告警 (含进程被杀信息) → ④ 如果连续 2 次 OOM 则将机器从 registry 中永久排除本轮 Sprint |
+| **恢复条件** | Sprint 结束后自动重置 / 运维手动恢复 |
+| **日志级别** | CRITICAL |
+
+#### 场景 3: SSH 密钥轮换失败 (ERR-024 SSHKeyRotationError)
+
+| 项目 | 内容 |
+|------|------|
+| **触发条件** | SSH 连接返回 `Permission denied (publickey)` 或 `Host key verification failed` |
+| **检测点** | Dispatcher._ssh_pre_check() (ALG-013a) 或 _ssh_exec() stderr |
+| **处理流程** | ① 标记机器为 OFFLINE → ② 当前任务迁移 → ③ 钉钉告警 (含 host + 具体错误信息) → ④ 不自动重试 SSH 认证 (安全原因) |
+| **恢复条件** | 运维更新 SSH 密钥后，手动恢复机器状态 |
+| **日志级别** | ERROR |
+| **安全约束** | 禁止在日志中打印密钥内容或密钥路径 |
+
+#### 场景 4: Webhook 回退 (Reporter 降级)
+
+| 项目 | 内容 |
+|------|------|
+| **触发条件** | 钉钉 Webhook 调用返回非 200 或超时 (默认 10s) |
+| **检测点** | Reporter._send_dingtalk() |
+| **处理流程** | ① 第 1 次失败: 重试 1 次 (间隔 2s) → ② 仍失败: 降级为仅写本地文件 `reports/webhook_fallback_{ts}.md` → ③ 记录 WARNING 日志 → ④ 不阻塞主流程 (通知是尽力而为) |
+| **恢复条件** | 下次 Sprint 自动恢复正常发送 |
+| **日志级别** | WARNING |
+| **设计原则** | 通知系统故障不应影响核心编码流水线 |
+
+#### 场景 5: 进程崩溃恢复 (Orchestrator Crash Recovery)
+
+| 项目 | 内容 |
+|------|------|
+| **触发条件** | Orchestrator 进程意外终止 (SIGKILL、断电、Python 异常未捕获) |
+| **检测点** | 下次启动时 TaskEngine.__init__() 检测 `_snapshot.json` 存在 |
+| **处理流程** | ① 加载最近快照 (ALG-009c) → ② 验证快照版本和完整性 → ③ 恢复 QUEUED/DISPATCHED/RETRY 状态的任务 → ④ 已 DISPATCHED 但无结果的任务 → 标记为 RETRY → ⑤ 记录 WARNING "从快照恢复 N 个任务" → ⑥ 继续正常调度流程 |
+| **快照时机** | 每次状态变更后通过 StateMachine 回调自动保存 (见 DD-MOD-004 §4.2) |
+| **日志级别** | WARNING |
+| **限制** | 正在远程执行中的 aider 任务可能已产出代码但未 push，需要人工检查 |
+
+**故障检测与响应汇总表**:
+
+| 故障 | 错误码 | 自动恢复 | 告警级别 | 影响范围 |
+|------|--------|---------|---------|---------|
+| 磁盘满 | ERR-022 | ✗ 需人工 | ERROR | 单机 |
+| OOM | ERR-023 | ✗ 需人工 | CRITICAL | 单机 |
+| SSH 密钥 | ERR-024 | ✗ 需人工 | ERROR | 单机 |
+| Webhook | — | ✓ 自动降级 | WARNING | 仅通知 |
+| 进程崩溃 | — | ✓ 快照恢复 | WARNING | 全局 |
+
+### 2.4 异常处理原则
 
 | 原则 | 说明 |
 |------|------|
 | **不吞异常** | 所有 except 块必须记录日志 (至少 warning 级别) |
-| **优雅降级** | LLM 调用失败 → 给默认值继续 (如 score=4.0)，不阻塞流水线 |
+| **优雅降级** | LLM 调用失败 → 给默认值继续 (如 score=3.5)，不阻塞流水线 ★v1.1: 4.0→3.5 |
 | **上下文传递** | 异常 message 包含: 模块名、操作名、原始错误 |
 | **终态安全** | 任何未预期异常导致任务 ESCALATED，不会卡在中间态 |
 | **重试可区分** | 可重试异常 (网络超时) vs 不可重试异常 (配置错误) 应明确区分 |
@@ -236,11 +314,43 @@ class LLMProvider(ABC):
 | Max Tokens | 4096 | 2048 | 调用方指定 |
 | Timeout | 30s | 10s | 调用方指定 |
 
+### 4.4 LLM 重试策略 ★v1.1
+
+> 对应 ACTION-ITEM v2.1 A-102: 两个模块共享相同的重试逻辑
+
+#### 统一重试参数
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| MAX_RETRIES | 3 | 最大重试次数 (含首次) |
+| BACKOFF_BASE | 1s | 退避基数 |
+| 退避序列 | 1s → 2s → 4s | `base × 2^(attempt-1)` |
+| 429 处理 | 优先 `Retry-After` 头 | 服务端指定的等待时间优先 |
+
+#### 可重试 vs 不可重试
+
+| 错误类型 | 重试? | 对应 ERR |
+|---------|-------|---------|
+| HTTP 429 (速率限制) | ✅ | ERR-026 LLMRateLimitError |
+| HTTP 5xx (服务端错误) | ✅ | ERR-009 LLMConnectionError |
+| 连接超时 / 网络断开 | ✅ | ERR-009 LLMConnectionError |
+| HTTP 4xx (非429, 如 401/403) | ❌ | ERR-010 LLMResponseError |
+| JSON 解析失败 | ❌ | ERR-010 LLMResponseError |
+
+#### 降级兜底
+
+当 3 次重试耗尽后:
+- **DocAnalyzer**: `analyze_and_decompose()` catch `LLMConnectionError` → 返回 `[]` (无任务), 上游 `_discover_tasks()` fallback 到 v2 DocParser
+- **AutoReviewer L2**: catch → `(True, "L2 降级跳过")`, 不阻塞流水线
+- **AutoReviewer L3**: catch → `(3.5, "L3 降级: 待人工审查")`, 边界通过但标记降级
+
+> **v1.1 变更**: L3 降级分从 4.0 改为 3.5 (= `review_threshold`)。原 4.0 导致降级审查静默通过，人工无感知。3.5 = threshold 使其刚好通过但在报告中标记为「降级通过」。
+
 ---
 
 ## §5 全局序列图
 
-### SEQ-001: Sprint 完整生命周期
+### SEQ-SYS-001: Sprint 完整生命周期
 
 ```mermaid
 sequenceDiagram
@@ -315,7 +425,7 @@ sequenceDiagram
     Orch->>Git: commit() + push() + tag_sprint()
 ```
 
-### SEQ-002: 任务重试流程
+### SEQ-SYS-002: 任务重试流程
 
 ```mermaid
 sequenceDiagram
@@ -343,7 +453,7 @@ sequenceDiagram
     end
 ```
 
-### SEQ-003: LLM 调用与降级
+### SEQ-SYS-003: LLM 调用与降级
 
 ```mermaid
 sequenceDiagram
@@ -475,3 +585,4 @@ with self._lock:
 | 版本 | 日期 | 变更内容 | 作者 |
 |------|------|---------|------|
 | v1.0 | 2026-03-07 | 创建: 异常体系、日志规范、LLM 抽象、全局序列图、配置映射、并发模型、依赖清单 | AutoDev Pipeline |
+| v1.1 | 2026-03-07 | SEQ-001~003 重命名为 SEQ-SYS-001~003，消除与模块级 SEQ 编号碰撞 | AutoDev Pipeline |

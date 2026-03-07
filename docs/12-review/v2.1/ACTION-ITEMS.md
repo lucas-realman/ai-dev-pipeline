@@ -11,9 +11,9 @@
 
 | ID | 来源 | 改进项 | 影响模块 | 工作量 | 期限 |
 |----|------|--------|---------|--------|------|
-| **A-100** | RISK-006, TF-001 | 实现循环依赖检测: `enqueue()` 中对 `depends_on` 关系做拓扑排序，发现环路时 ESCALATE 相关任务 | task_engine.py | 2h | v1.1 |
-| **A-101** | RISK-001, TF-002 | 实现 JSON 快照持久化: 每次状态变更写入 `state_snapshot.json`，启动时加载恢复 | task_engine.py, state_machine.py | 4h | v1.1 |
-| **A-102** | RISK-002, TF-003 | `_call_llm()` 增加重试: 3 次指数退避 (1s, 2s, 4s)，429 限流专门处理 | doc_analyzer.py, reviewer.py | 2h | v1.1 |
+| **A-100** | RISK-006, TF-001 | ✅ 实现循环依赖检测: `enqueue()` 中对 `depends_on` 关系做拓扑排序，发现环路时 ESCALATE 相关任务 | task_engine.py | 2h | v1.1 |
+| **A-101** | RISK-001, TF-002 | ✅ 实现 JSON 快照持久化: 每次状态变更写入 `state_snapshot.json`，启动时加载恢复 | task_engine.py, state_machine.py | 4h | v1.1 |
+| **A-102** | RISK-002, TF-003 | ✅ `_call_llm()` 增加重试: 3 次指数退避 (1s, 2s, 4s)，429 限流专门处理 | doc_analyzer.py, reviewer.py | 2h | v1.1 |
 
 ---
 
@@ -21,14 +21,14 @@
 
 | ID | 来源 | 改进项 | 影响模块 | 工作量 | 期限 |
 |----|------|--------|---------|--------|------|
-| **A-110** | 03-评审 ADR-003 | Reviewer 降级 score 从 4.0 调整为 3.5 (低于 pass_threshold)，避免审查静默跳过 | reviewer.py | 0.5h | Week 2 |
-| **A-111** | TF-004 | Config 启动时 schema 校验: 必填字段检查 (llm.openai_api_key, machines 列表非空) | config.py | 2h | Week 2 |
-| **A-112** | TF-005 | main.py 增加 SIGTERM/SIGINT 信号处理: 设置 shutdown 标志 → 等待当前 batch 完成 → 保存快照 → 退出 | main.py | 1h | Week 2 |
-| **A-113** | RISK-003 | SSH 连接预检: dispatch 前执行 `ssh -o ConnectTimeout=5 {host} echo ok`，失败则标记机器 OFFLINE | dispatcher.py | 1h | Week 2 |
-| **A-114** | RISK-008 | API Key 传递优化: 远程脚本使用 `export OPENAI_API_KEY` 而非内嵌值，或通过 SSH env 传递 | dispatcher.py | 1h | Week 2 |
-| **A-115** | 02-评审 §5 | 统一接口参数名与设计文档: IF-002 sprint_id→sprint, IF-005 required_tags→task_tags 等 5 处 | OD-003 文档 | 1h | Week 2 |
-| **A-116** | RISK-005 | stale-busy 检测: main loop 中检查 BUSY 状态超过 2×single_task_timeout 的机器，强制 set_idle | main.py | 1h | Week 2 |
-| **A-117** | RISK-004 | Git 推送策略增强: 当 push 次数 > 配置阈值进行告警; 支持 per-machine branch + 合并 | dispatcher.py, git_ops.py | 3h | Week 3 |
+| **A-110** | 03-评审 ADR-003 | ✅ Reviewer 降级 score 从 4.0 调整为 3.5 (低于 pass_threshold)，避免审查静默跳过 | reviewer.py | 0.5h | Week 2 |
+| **A-111** | TF-004 | ✅ Config 启动时 schema 校验: 必填字段检查 (llm.openai_api_key, machines 列表非空) | config.py | 2h | Week 2 |
+| **A-112** | TF-005 | ✅ main.py 增加 SIGTERM/SIGINT 信号处理: 设置 shutdown 标志 → 等待当前 batch 完成 → 保存快照 → 退出 | main.py | 1h | Week 2 |
+| **A-113** | RISK-003 | ✅ SSH 连接预检: dispatch 前执行 `ssh -o ConnectTimeout=5 {host} echo ok`，失败则标记机器 OFFLINE | dispatcher.py | 1h | Week 2 |
+| **A-114** | RISK-008 | ✅ API Key 传递优化: 远程脚本使用 `export OPENAI_API_KEY` 而非内嵌值，或通过 SSH env 传递 | dispatcher.py | 1h | Week 2 |
+| **A-115** | 02-评审 §5 | ✅ 统一接口参数名与设计文档: IF-002 sprint_id int→str, IF-005 required_tags→task_tags 等 | OD-003 文档 | 1h | Week 2 |
+| **A-116** | RISK-005 | ✅ stale-busy 检测: main loop 中检查 BUSY 状态超过 2×single_task_timeout 的机器，强制 set_idle | main.py | 1h | Week 2 |
+| **A-117** | RISK-004 | ✅ Git 推送策略增强: 当 push 次数 > 配置阈值进行告警; 支持 per-machine branch + 合并 | dispatcher.py, git_ops.py | 3h | Week 3 |
 
 ---
 
@@ -92,3 +92,4 @@
 | 版本 | 日期 | 变更内容 | 作者 |
 |------|------|---------|------|
 | v1.0 | 2026-03-07 | 初始版本: 24 项 ACTION-ITEMS | AutoDev Pipeline |
+| v1.1 | 2026-03-07 | P0 全部完成 (3/3); P1 全部完成 (8/8); 均为文档级设计变更 | AutoDev Pipeline |

@@ -79,8 +79,79 @@ function _load(config_path):
     # 递归展开环境变量
     data = _expand_env_vars(raw)
     
+    # ★v1.1: Schema 校验
+    _validate_schema(data)
+    
     return data
 ```
+
+### 2.2a `_validate_schema` ★v1.1
+
+| 项目 | 内容 |
+|------|------|
+| **签名** | `@staticmethod _validate_schema(data: dict) → None` |
+| **职责** | 启动时校验配置必填字段，失败时耗尽的报错 |
+| **异常** | `ConfigSchemaError` (ERR-025) |
+| **算法** | ALG-025a |
+
+> 对应 ACTION-ITEM v2.1 A-111
+
+#### ALG-025a: 配置 Schema 校验
+
+```
+function _validate_schema(data):
+    """
+    启动时校验配置必填字段。所有错误累积后一次性报出。
+    """
+    errors = []
+    
+    # 必填字段检查
+    REQUIRED_FIELDS = [
+        ("llm.openai_api_key", "LLM API Key 未配置"),
+        ("project.branch", "分支名未配置"),
+    ]
+    
+    for key_path, msg in REQUIRED_FIELDS:
+        value = _get_nested(data, key_path)
+        if value is None or value == "":
+            errors.append(f"[{key_path}] {msg}")
+    
+    # machines 列表非空检查
+    machines = _get_nested(data, "machines")
+    if not machines:
+        errors.append("[machines] 机器列表不能为空")
+    elif isinstance(machines, list):
+        for i, m in enumerate(machines):
+            if not m.get("machine_id"):
+                errors.append(f"[machines.{i}.machine_id] 缺失")
+            if not m.get("host"):
+                errors.append(f"[machines.{i}.host] 缺失")
+    
+    # 数值范围检查
+    max_concurrent = _get_nested(data, "task.max_concurrent")
+    if max_concurrent is not None and (not isinstance(max_concurrent, int) or max_concurrent < 1):
+        errors.append("[task.max_concurrent] 必须为正整数")
+    
+    max_retries = _get_nested(data, "task.max_retries")
+    if max_retries is not None and (not isinstance(max_retries, int) or max_retries < 0):
+        errors.append("[task.max_retries] 必须为非负整数")
+    
+    if errors:
+        msg = "\n".join(errors)
+        raise ConfigSchemaError(f"配置校验失败 ({len(errors)} 项):\n{msg}")  # ERR-025
+```
+
+**校验规则汇总**:
+
+| 字段 | 规则 | 严重程度 |
+|------|------|----------|
+| `llm.openai_api_key` | 非空 | 阻塞启动 |
+| `project.branch` | 非空 | 阻塞启动 |
+| `machines` | 非空 list/dict | 阻塞启动 |
+| `machines[*].machine_id` | 非空 | 阻塞启动 |
+| `machines[*].host` | 非空 | 阻塞启动 |
+| `task.max_concurrent` | 正整数 | 警告 |
+| `task.max_retries` | 非负整数 | 警告 |
 
 ### 2.3 `_expand_env_vars` (静态方法) ★
 
@@ -276,3 +347,4 @@ logging:
 | 版本 | 日期 | 变更内容 |
 |------|------|---------|
 | v1.0 | 2026-03-07 | 从 DD-001 §12 提取并扩充，含完整 Schema 与属性映射 |
+| v1.1 | 2026-03-07 | 新增 ALG-025a Schema 校验; 增加 ConfigSchemaError (ERR-025) |
